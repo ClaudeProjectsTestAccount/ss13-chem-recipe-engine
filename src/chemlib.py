@@ -472,12 +472,22 @@ def _mobspawn(sim, holder, rx, mult):
     sim.note('mob spawn: 1..%d mobs%s' % (mult, ' (friendly faction)' if friendly else ''))
     sim.effects.append({'kind': 'mobspawn', 'max': mult, 'friendly': friendly, 'reaction': rx.short, 'mult': mult})
 
+def _phlogiston(sim, holder, rx, mult):
+    """phlogiston on_reaction: unless stabilizing agent is in the holder it spawns plasma at 1000K and clears the whole holder (a fireball on the borg)"""
+    if holder.has('/datum/reagent/stabilizing_agent'):
+        sim.note('stabilizing agent present: phlogiston forms without the fireball')
+        return
+    sim.note('!! no stabilizing agent: phlogiston spawns %du of 1000K plasma on the borg and wipes the beaker' % mult)
+    sim.effects.append({'kind': 'HAZARD', 'reaction': rx.short, 'what': 'phlogiston without stabilizing agent: 1000K plasma fireball on the borg, beaker wiped', 'mult': mult})
+    holder.clear()
+
 def _virus_mix(sim, holder, rx, mult):
     sim.note('(on_reaction only evolves a disease carried by the blood data; no disease in the seed blood = nothing happens)')
 
 HANDLERS = {
     '/datum/chemical_reaction/mix_virus/mix_virus_2': _virus_mix,
     '/datum/chemical_reaction/foam': _foam,
+    '/datum/chemical_reaction/phlogiston': _phlogiston,
     '/datum/chemical_reaction/smoke_powder': _smoke_powder,
     '/datum/chemical_reaction/metalfoam': _foam,
     '/datum/chemical_reaction/ironfoam': _foam,

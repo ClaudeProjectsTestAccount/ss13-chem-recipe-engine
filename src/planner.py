@@ -103,6 +103,7 @@ class Rig:
         lists = dispenser_lists(db)
         self.avail = set(sum([lists[t] for t in range(1, tier + 1)], []))
         self.steps = []   # (text, state-after, notes)
+        self.peak = 0.0   # most the payload beaker ever held at the moment something was about to react (for the 'beaker used' figure)
 
     def _snap(self, text, notes=None):
         nlog = self.sim.log[:]; self.sim.log.clear()
@@ -119,6 +120,7 @@ class Rig:
         for a in clicks:
             to_disp = max(0, min(a, tgt.max - tgt.total))
             if to_disp < a: self.sim.warnings.append('%s full: dispenser click of %du was clamped to %du' % (tgt.name, a, to_disp))
+            if tgt is self.beaker: self.peak = max(self.peak, tgt.total + to_disp)
             tgt.add_reagent(p, to_disp, chemlib.DEFAULT_TEMP)
         ct = {}
         for a in clicks: ct[a] = ct.get(a, 0) + 1
@@ -130,6 +132,7 @@ class Rig:
         p = self.db.find_reagent(reagent)
         tgt = self.active
         to_add = max(0, min(units, tgt.max - tgt.total))
+        if tgt is self.beaker: self.peak = max(self.peak, tgt.total + to_add)
         if to_add < units: self.sim.warnings.append('%s full: outside supply of %gu was clamped to %gu' % (tgt.name, units, to_add))
         tgt.add_reagent(p, to_add, chemlib.DEFAULT_TEMP)
         self._snap('Outside supply: put %gu %s into the %s%s' % (units, self.db.name(p), tgt.name, (' (' + source + ')') if source else ''))
@@ -179,6 +182,7 @@ class Rig:
                 raise ValueError('trigger beaker holds %.0fu but its largest pour is %du: it would need several pours (the first one would already react)'
                                  % (total, max(g.tamts)))
             amt = min(a for a in g.tamts if a >= total - 1e-9)
+            self.peak = max(self.peak, self.beaker.total + min(total, self.beaker.max - self.beaker.total))
             n = self.syringe.trans_to(self.beaker, amt)
             if self.syringe.total > 0.05:
                 self.sim.warnings.append('payload beaker overflowed: %.1fu of the trigger stayed behind' % self.syringe.total)
@@ -187,6 +191,7 @@ class Rig:
             if not any(a >= total - 1e-9 for a in g.samts):
                 raise ValueError('syringe transfer amounts %s cannot inject %.0fu in one go' % (g.samts, total))
             amt = min(a for a in g.samts if a >= total - 1e-9)
+            self.peak = max(self.peak, self.beaker.total + min(total, self.beaker.max - self.beaker.total))
             n = self.syringe.trans_to(self.beaker, amt)
             if self.syringe.total > 0.05:
                 self.sim.warnings.append('payload beaker overflowed: %.1fu stayed in the syringe' % self.syringe.total)

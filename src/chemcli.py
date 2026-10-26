@@ -14,9 +14,14 @@ chemcli.py - Cyborg Chem Nade planner for Monkestation (uses chemlib/planner/sea
                                         --trigger-units N               how much trigger to make (default: syringe volume / 15 for two-beaker)
                                         --step N                        dispenser granularity of the search grid (auto for big beakers)
 
+  chemcli.py publish --type T --beaker 100|300|0 [--syringe 15|60] --title "..." --ops "<ops>" --what "..." --harm safe|caution|danger
+                     [--payload <reagent>] [--tagline ..] [--notes ..] [--caution ..] [--src ..] [--id ..] [--rank N] [--spec file.json]
+                                            simulate a recipe, file it in the right tier section / type group of docs/index.html (types: cleaning slip hell med walls other)
+  chemcli.py book rebuild|list|rm <id>     regenerate the page / list the recipes / remove one
+
 Everything is simulated by chemlib (a port of holder.dm / recipes). See README in the notes tab.
 """
-import sys, argparse, itertools, random, time, json
+import sys, os, argparse, itertools, random, time, json
 import chemlib, planner, search
 from chemlib import DB
 
@@ -330,6 +335,42 @@ def add_gear(a):
 def gear_from(args):
     return planner.Gear(args.beaker, args.syringe, args.trigger_beaker)
 
+def book_cmd(args):
+    import book
+    if args.cmd == 'book':
+        if args.action == 'rebuild': print('wrote', book.write_page(use_cache=True)); return
+        if args.action == 'rm':
+            if not args.id: raise SystemExit('book rm <id>')
+            book.remove_recipe(args.id); print('removed', args.id); return
+        for r in book.load_book():
+            print('%-34s %-8s %3s/%-3s %s' % (r['id'], r['type'], r['beaker'] or 'any', r.get('syringe') or '-', r['title']))
+        return
+    spec = {}
+    if args.spec:
+        with open(args.spec) as fh: spec = json.load(fh)
+    for k in ('id', 'type', 'title', 'tagline', 'beaker', 'syringe', 'payload', 'harm', 'what', 'notes', 'caution', 'src', 'rank'):
+        v = getattr(args, k)
+        if v is not None and (k not in spec or v not in ('', 50)): spec[k] = v
+    if args.ops: spec['ops'] = [list(o) for o in parse_ops(args.ops)]
+    if spec.get('syringe') is None: spec.pop('syringe', None)
+    try:
+        e, comp, replaced = book.add_recipe(spec, write=False)
+    except (ValueError, KeyError) as ex:
+        raise SystemExit('not published: %s' % ex)
+    ok_warn = [w for w in comp['warnings']]
+    if ok_warn and not args.allow_warnings:
+        raise SystemExit('not published: the engine warned: %s\n(re-run with --allow-warnings if that is deliberate, e.g. a clamped dispenser click)' % '; '.join(ok_warn))
+    recipes = [r for r in book.load_book() if r['id'] != e['id']] if os.path.exists(book.BOOK_PATH) else []
+    recipes.append(e); book.save_book(recipes); book.write_page(recipes=recipes)
+    s = comp['summary']
+    print('%s %s' % ('replaced' if replaced else 'published', e['id']))
+    print('  section: %s | group: %s' % (', '.join(book.section_name(e['beaker'], y) for y in comp['syringes']) or 'any gear', e['type']))
+    print('  effect: %s | beaker used: %s%% | order: %s' % (', '.join('%s=%s' % kv for kv in s.items() if kv[0] != 'fill'), s.get('fill'),
+          'any order works' if comp['order']['same'] == comp['order']['total'] else 'ORDER MATTERS (%d of %d)' % (comp['order']['same'], comp['order']['total'])))
+    for l in comp['results']: print('  ' + l)
+    for w in comp['warnings']: print('  engine note:', w)
+    print('  wrote docs/index.html; commit data/recipe_book.json + docs/index.html')
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest='cmd')
@@ -343,7 +384,17 @@ def main(argv=None):
     a.add_argument('--tier', type=int, default=1)
     a.add_argument('--top', type=int, default=2)
     a.add_argument('--min-expo', type=float, default=1.0, help='minimum volume exposed per tile per effect tick (turf effects need >=1)')
+    a = sub.add_parser('publish', help='simulate a recipe and file it into data/recipe_book.json + docs/index.html')
+    a.add_argument('--spec', help='JSON file with the fields below instead of flags')
+    a.add_argument('--id'); a.add_argument('--type'); a.add_argument('--title'); a.add_argument('--tagline', default='')
+    a.add_argument('--beaker', type=int, help='100, 300, or 0 for "works with any gear"'); a.add_argument('--syringe', type=int, help='15 or 60 (omit if the recipe never uses the syringe)')
+    a.add_argument('--ops', help='step list, e.g. "dispense water 30; draw 15; spill; heat 400; inject"'); a.add_argument('--payload')
+    a.add_argument('--harm', default='caution'); a.add_argument('--what'); a.add_argument('--notes', default=''); a.add_argument('--caution', default='')
+    a.add_argument('--src', default=''); a.add_argument('--rank', type=int, default=50, help='sort position inside its type group (lower = earlier)')
+    a.add_argument('--allow-warnings', action='store_true', help='accept engine warnings (e.g. a deliberate clamped dispenser click)')
+    a = sub.add_parser('book', help='recipe book: rebuild the page, list, rm'); a.add_argument('action', choices=['rebuild', 'list', 'rm']); a.add_argument('id', nargs='?')
     args = ap.parse_args(argv)
+    if args.cmd in ('publish', 'book'): return book_cmd(args)
     db = DB()
     if args.cmd == 'reagent':
         p = db.find_reagent(args.name)
