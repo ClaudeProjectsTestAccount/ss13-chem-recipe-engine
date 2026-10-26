@@ -5,6 +5,8 @@ It reads the real chemistry rules out of the game's source code, simulates them 
 
 Right now it does one job: **give medical (and science) cyborgs "syringe into beaker" foam/smoke grenade recipes** - cleaner foam, lube foam, lube smoke, acid foam. The engine is written to grow well beyond that (see [Roadmap](#roadmap)).
 
+**Already calculated recipes (stock gear, tested in the simulator):** [cleaner foam](docs/RECIPES.md#cleaner-foam-30-tiles) · [cleaner smoke](docs/RECIPES.md#cleaner-smoke-45-tiles) · [lube foam](docs/RECIPES.md#lube-foam-30-tiles) · [lube smoke](docs/RECIPES.md#lube-smoke-45-tiles) · [hellfoam (fluorosulfuric acid foam)](docs/RECIPES.md#hellfoam---fluorosulfuric-acid-foam-30-tiles). Two-beaker and bigger-gear variants: ask the planner.
+
 > **Status:** the reaction math is verified against the game code and a second, independent hand calculation. The recipes have **not yet been tested in-game**, and a few borg click-level details are unverified (listed [below](#what-is-verified-and-what-is-not)).
 
 ---
