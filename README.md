@@ -3,9 +3,11 @@
 **A chemistry simulator and recipe planner for Space Station 13, built for [Monkestation](https://github.com/Monkestation/Monkestation2.0) and designed to be modular for other tg-based servers.**
 It reads the real chemistry rules out of the game's source code, simulates them exactly (reaction order, BYOND rounding, foam and smoke scaling), and writes step-by-step recipes you can follow in-game.
 
-Right now it does one job: **give medical (and science) cyborgs "syringe into beaker" foam/smoke grenade recipes** - cleaner foam, lube foam, lube smoke, acid foam. The engine is written to grow well beyond that (see [Roadmap](#roadmap)).
+Right now it does one job: **give medical (and science) cyborgs "syringe into beaker" foam/smoke grenade recipes** - cleaner foam, lube foam, lube smoke, acid foam - and a second batch of **unusual reactions** (metal-foam walls, carpet foam, healing fog, vortex shockwaves...). The engine is written to grow well beyond that (see [Roadmap](#roadmap)).
 
-**Already calculated recipes (stock gear, tested in the simulator):** [cleaner foam](docs/RECIPES.md#cleaner-foam-30-tiles) · [cleaner smoke](docs/RECIPES.md#cleaner-smoke-45-tiles) · [lube foam](docs/RECIPES.md#lube-foam-30-tiles) · [lube smoke](docs/RECIPES.md#lube-smoke-45-tiles) · [hellfoam (fluorosulfuric acid foam)](docs/RECIPES.md#hellfoam---fluorosulfuric-acid-foam-30-tiles). Two-beaker and bigger-gear variants: ask the planner.
+**Already calculated recipes (tested in the simulator):**
+- Original five: [cleaner foam](docs/RECIPES.md#cleaner-foam-30-tiles) · [cleaner smoke](docs/RECIPES.md#cleaner-smoke-45-tiles) · [lube foam](docs/RECIPES.md#lube-foam-30-tiles) · [lube smoke](docs/RECIPES.md#lube-smoke-45-tiles) · [hellfoam](docs/RECIPES.md#hellfoam---fluorosulfuric-acid-foam-30-tiles)
+- **New reactions:** [metal foam](docs/RECIPES.md#metal-foam---instant-walls-100-tiles) · [metal foam XL](docs/RECIPES.md#metal-foam-xl---200-tiles-bluespace-beaker) · [iron foam](docs/RECIPES.md#iron-foam---reinforced-walls-100-tiles) · [smart foam](docs/RECIPES.md#smart-foam---seals-area-borders-only-100-tiles-bluespace-beaker) · [drying foam](docs/RECIPES.md#drying-foam---removes-lube-and-wet-floors-30-tiles) · [carpet foam](docs/RECIPES.md#carpet-foam---redecorates-the-floor-30-tiles) · [black carpet foam](docs/RECIPES.md#black-carpet-foam-30-tiles) · [carpet foam XL](docs/RECIPES.md#carpet-foam-xl---120-tiles-bluespace-beaker--bluespace-syringe) · [brute-mender fog](docs/RECIPES.md#brute-mender-fog-libital-smoke-45-tiles) · [burn-mender fog](docs/RECIPES.md#burn-mender-fog-aiuri-smoke-45-tiles) · [sorium shockwave](docs/RECIPES.md#sorium-shockwave---throws-everything-away-from-you-range-6) · [dark matter pull](docs/RECIPES.md#dark-matter-pull---drags-everything-toward-you-range-6) · [friendly life](docs/RECIPES.md#friendly-life-bluespace-beaker-donated-ingredients)
 
 > **Status:** the reaction math is verified against the game code and a second, independent hand calculation. The recipes have **not yet been tested in-game**, and a few borg click-level details are unverified (listed [below](#what-is-verified-and-what-is-not)).
 
@@ -63,6 +65,27 @@ If any of that is different on your server, please open an issue - it is the mos
 
 Cleaner and lube only act on a tile when at least 1u lands on it per tick; every recipe clears that.
 
+### New reactions (second batch)
+
+Full steps, cautions and the code each effect was read from are in [`docs/RECIPES.md`](docs/RECIPES.md#new-reactions). Several use bigger gear on purpose.
+
+| Reaction | What it does | Gear |
+| --- | --- | --- |
+| Metal foam | foam that sets into 20 HP airtight walls: 100 tiles from a stock beaker | heater |
+| Metal foam XL | the same, 200 tiles | bluespace beaker, heater |
+| Iron foam | same walls, 50 HP | heater |
+| Smart foam | walls only on area borders (breach rims, door frames) | bluespace beaker, heater |
+| Drying foam | wipes lube / wet floors off 30 tiles (the antidote to lube foam) | stock |
+| Carpet foam / black carpet foam | turns every floor tile it touches into (black) carpet | 1u blood as a seed |
+| Carpet foam XL | 120 tiles of carpet | bluespace syringe + beaker, 1u blood |
+| Brute-mender fog / burn-mender fog | chem smoke that heals everyone breathing it (libital / aiuri) | stock |
+| Sorium shockwave / dark matter pull | vortex that throws things away from / pulls them toward you (range caps at 6 tiles, so a bigger beaker does not help) | stock |
+| Friendly life | spawns rand(1, mult) friendly mobs; a 300u beaker allows mult 3 | bluespace beaker, donated strange reagent + synthflesh |
+
+Reactions the dispenser alone cannot make (life, corgium, butterflium, ant slurry) are listed at the end of that document with what they are missing.
+
+**The blood trick:** blood is not a dispenser chemical, but `unstable mutagen + a blood catalyst -> more blood` (a virology recipe) multiplies it, so 1u of real blood drawn with your syringe becomes as much as you like. The planner treats that loop as a seed, not a source.
+
 ### Gear and upgrades
 Beaker, syringe and a second beaker are parameters, with sizes read from the game source:
 
@@ -86,7 +109,11 @@ python3 src/chemcli.py nade --trigger foam  --payload "space cleaner" --beaker b
 python3 src/chemcli.py nade --trigger foam  --payload "space cleaner" --trigger-beaker large     # two-beaker mode
 python3 src/chemcli.py reaction "space cleaner"        # look a recipe up
 python3 src/chemcli.py sim "dispense water 30; dispense silicon 15; dispense oxygen 15"   # simulate any step list
+python3 src/chemcli.py sim "add blood 1; dispense radium 5; dispense phosphorus 5; dispense chlorine 5"   # 'add' = an ingredient from outside the dispenser
+python3 src/export_recipes.py                          # regenerate docs/RECIPES.md from src/recipes.py
 ```
+
+`nade` designs a *foam or smoke carrier* for one payload chemical. The new-reaction recipes (walls, vortexes, mob spawns...) are hand-written step lists in `src/recipes.py` and checked with `sim`: the engine simulates the reagent maths and reports the effect (foam tiles, vortex range, mob-spawn cap); what the effect then does in the game is read from the code and cited in each recipe.
 
 Python 3 only, no dependencies. Gear flags take a name or a volume: `--beaker large|xl|meta|bluespace|beaker|noreact|bottle|tube|<units>`, `--syringe standard|piercing|bluespace|<units>`, `--trigger-beaker <name|units>`, `--trigger-units N|auto`. The planner searches dispenser amounts exhaustively, simulates every candidate through the same reaction code, checks that the order of dispensing does not change the result (or flags it when it does), and prints the step list.
 
@@ -127,6 +154,7 @@ This is meant to grow into a general recipe generator: **bartender drinks**, and
 | Reaction formulas, temperatures, dispenser lists, container sizes - parsed from the game source | Any of it in a live round |
 | Reaction ordering, BYOND rounding quirks, nested reactions, foam/smoke scaling - 32 source-cited engine checks | The borg click flow (dispenser / apparatus / syringe handling) |
 | Six recipes re-derived by hand independently (`src/verify_independent.py`) | Borg use of a chem heater; pouring one held beaker into another |
+| Reagent maths of the 13 new reactions (engine), their effects read from the code | Mob-spawn, vortex and wall effects are not simulated, only cited; that a dispenser click really stops at the free space is read from `chem_dispenser.dm`, not played |
 | Rules diff against live source (`codecheck.py`) | Dispenser power-cell capacity (not modelled); "hellfoam" meaning |
 
 ## Tests

@@ -448,7 +448,44 @@ def _smoke_powder(sim, holder, rx, mult):
     sim.effects.append({'kind': 'smoke', 'tiles': tiles, 'reaction': rx.short, 'tile': sh.contents(),
                         'pre_scale': chem.contents(), 'holder': sh})
 
+def _vortex(sim, holder, rx, mult):
+    """sorium / liquid dark matter: eats its own product, then goonchem_vortex(turf, push?, clamp(sqrt(k*created_volume),1,6))"""
+    if holder.has('/datum/reagent/stabilizing_agent'):
+        sim.note('stabilizing agent present: no vortex'); return
+    body = rx.on_reaction
+    rm = re.search(r'remove_reagent\(\s*(/[\w/]+)\s*,\s*created_volume\s*\*\s*(\d+(?:\.\d+)?)', body)
+    rg = re.search(r'sqrt\(\s*created_volume\s*\*\s*(\d+(?:\.\d+)?)\s*\)\s*,\s*(\d+)\s*,\s*(\d+)', body)
+    vt = re.search(r'goonchem_vortex\(\s*\w+\s*,\s*(\d)\s*,', body)
+    if not (rm and rg and vt):
+        sim.effects.append({'kind': 'UNMODELED', 'reaction': rx.short, 'tags': ['vortex(unparsed)'], 'mult': mult}); return
+    holder.remove_reagent(rm.group(1), mult * float(rm.group(2)))
+    k, lo, hi = float(rg.group(1)), float(rg.group(2)), float(rg.group(3))
+    raw = (k * mult) ** 0.5
+    rng = min(hi, max(lo, raw))
+    sim.note('vortex (%s): range %.2f (sqrt(%g*%d)=%.2f, clamped %g..%g)' % ('push' if vt.group(1) == '1' else 'pull', rng, k, mult, raw, lo, hi))
+    sim.effects.append({'kind': 'vortex', 'mode': 'push' if vt.group(1) == '1' else 'pull', 'range': rng, 'raw_range': raw,
+                        'cap': hi, 'mult': mult, 'reaction': rx.short})
+
+def _mobspawn(sim, holder, rx, mult):
+    """life / corgium / butterflium...: rand(1, created_volume) mobs; created_volume = mult for these reactions"""
+    friendly = 'FRIENDLY_SPAWN' in rx.on_reaction
+    sim.note('mob spawn: 1..%d mobs%s' % (mult, ' (friendly faction)' if friendly else ''))
+    sim.effects.append({'kind': 'mobspawn', 'max': mult, 'friendly': friendly, 'reaction': rx.short, 'mult': mult})
+
+def _virus_mix(sim, holder, rx, mult):
+    sim.note('(on_reaction only evolves a disease carried by the blood data; no disease in the seed blood = nothing happens)')
+
 HANDLERS = {
+    '/datum/chemical_reaction/mix_virus/mix_virus_2': _virus_mix,
     '/datum/chemical_reaction/foam': _foam,
     '/datum/chemical_reaction/smoke_powder': _smoke_powder,
+    '/datum/chemical_reaction/metalfoam': _foam,
+    '/datum/chemical_reaction/ironfoam': _foam,
+    '/datum/chemical_reaction/smart_foam': _foam,
+    '/datum/chemical_reaction/sorium': _vortex,
+    '/datum/chemical_reaction/liquid_dark_matter': _vortex,
+    '/datum/chemical_reaction/life': _mobspawn,
+    '/datum/chemical_reaction/life_friendly': _mobspawn,
+    '/datum/chemical_reaction/corgium': _mobspawn,
+    '/datum/chemical_reaction/butterflium': _mobspawn,
 }

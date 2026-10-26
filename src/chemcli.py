@@ -34,6 +34,7 @@ def decompose(db, payload, avail, max_temp=1000, seen=()):
         if payload not in rx.results: continue
         if rx.container or rx.other or rx.non_instant or rx.is_cold or rx.effects: continue
         if rx.required_temp > max_temp: continue
+        if any(r in rx.cat for r in rx.results): continue   # self-catalytic (e.g. blood multiplier): needs a seed, not a source
         order, heat, rxs, cost, ok = [], rx.required_temp if rx.required_temp > 300 else 0, [rx.short], 0, True
         for q in rx.req:
             sub = decompose(db, q, avail, max_temp, seen + (payload,))
@@ -207,6 +208,7 @@ def _run(db, ops, tier, reverse, gear=None):
         elif st[0] == 'swap': rig.swap()
         elif st[0] == 'draw': rig.draw(st[1] if len(st) > 1 else None)
         elif st[0] == 'spill': rig.spill()
+        elif st[0] == 'add': rig.add(st[1], st[2], st[3] if len(st) > 3 else None)
         elif st[0] == 'heat': rig.heat(st[1], st[2] if len(st) > 2 else 0.05)
         elif st[0] == 'inject': rig.inject()
     return rig
@@ -214,7 +216,7 @@ def _run(db, ops, tier, reverse, gear=None):
 def signature(rig):
     out = []
     for e in rig.sim.effects:
-        out.append((e['kind'], e.get('tiles'), tuple(sorted((k, round(v, 1)) for k, v in e.get('tile', {}).items()))))
+        out.append((e['kind'], e.get('tiles'), tuple(sorted((k, round(v, 1)) for k, v in e.get('tile', {}).items())), e.get('range'), e.get('max')))
     return tuple(out)
 
 def verify_orders(db, ops, tier, gear=None):
@@ -229,8 +231,28 @@ def verify_orders(db, ops, tier, gear=None):
         else:
             if cur: segs.append(cur); cur = []
     if cur: segs.append(cur)
-    perms = [list(itertools.permutations(s)) if len(s) <= 5 else [tuple(s)] for s in segs]
-    for combo in itertools.product(*perms):
+    rnd = random.Random(1)
+    def seg_perms(seg):
+        if len(seg) <= 6: return list(itertools.permutations(seg))
+        out = [tuple(seg)]                                          # long run: as written, each element first / last, plus 150 random orders
+        for i in range(len(seg)):
+            rest = [x for j, x in enumerate(seg) if j != i]
+            out.append(tuple([seg[i]] + rest)); out.append(tuple(rest + [seg[i]]))
+        for _ in range(150):
+            q = list(seg); rnd.shuffle(q); out.append(tuple(q))
+        return out
+    perms = [seg_perms(s) for s in segs]
+    total = 1
+    for pl in perms: total *= len(pl)
+    if total <= 2000:
+        combos = itertools.product(*perms)                     # every combination of orders across all segments
+    else:                                                      # too many: vary one segment at a time, the rest as written
+        base_combo = [pl[0] for pl in perms]
+        combos = []
+        for i, pl in enumerate(perms):
+            for perm in pl:
+                c = list(base_combo); c[i] = perm; combos.append(c)
+    for combo in combos:
         new = list(ops)
         for seg, perm in zip(segs, combo):
             for slot, idx in zip(seg, perm): new[slot] = ops[idx]
@@ -258,6 +280,11 @@ def fmt_effect(db, rig, payload):
                     lines.append('   (%slives %ds; every %.1fs tick exposes the floor to %.1fu of %s per tile, %d ticks)' %
                                  (note, m['life'], search.FOAM_DT if e['kind'] == 'foam' else search.SMOKE_DT,
                                   m['per_call'], db.name(payload), m['calls']))
+        elif e['kind'] == 'vortex':
+            lines.append('VORTEX (%s): range %.2f tiles%s' % (e['mode'], e['range'],
+                         ' (CAPPED at %g; the raw formula gave %.1f)' % (e['cap'], e['raw_range']) if e['raw_range'] > e['cap'] else ''))
+        elif e['kind'] == 'mobspawn':
+            lines.append('MOB SPAWN: rand(1,%d) mobs%s' % (e['max'], ' (friendly)' if e['friendly'] else ''))
         else:
             lines.append('!! UNMODELED %s' % e)
     return lines
@@ -286,6 +313,7 @@ def parse_ops(text):
         w = part.strip().split()
         if not w: continue
         if w[0] == 'dispense': ops.append(('dispense', ' '.join(w[1:-1]), int(w[-1])))
+        elif w[0] == 'add': ops.append(('add', ' '.join(w[1:-1]), float(w[-1])))
         elif w[0] == 'draw': ops.append(('draw', int(w[1]) if len(w) > 1 else None))
         elif w[0] == 'heat': ops.append(('heat', float(w[1])))
         else: ops.append((w[0],))

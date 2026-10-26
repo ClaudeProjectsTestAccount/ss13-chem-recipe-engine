@@ -125,6 +125,15 @@ class Rig:
         how = ' + '.join('%d click%s at %du' % (n, 's' if n > 1 else '', a) for a, n in sorted(ct.items(), reverse=True))
         self._snap('Dispenser: %du %s%s  (%s)' % (units, self.db.name(p), (' into the ' + tgt.name) if self.gear.two else '', how))
 
+    def add(self, reagent, units, source=None):
+        """an ingredient that is NOT from the chem dispenser (a donor bottle, a syringe of someone's blood...).  Any amount."""
+        p = self.db.find_reagent(reagent)
+        tgt = self.active
+        to_add = max(0, min(units, tgt.max - tgt.total))
+        if to_add < units: self.sim.warnings.append('%s full: outside supply of %gu was clamped to %gu' % (tgt.name, units, to_add))
+        tgt.add_reagent(p, to_add, chemlib.DEFAULT_TEMP)
+        self._snap('Outside supply: put %gu %s into the %s%s' % (units, self.db.name(p), tgt.name, (' (' + source + ')') if source else ''))
+
     def draw(self, units=None):
         if self.gear.two: raise ValueError('two-beaker mode has no syringe; use swap/inject (pour)')
         units = units or self.gear.syringe
@@ -192,6 +201,7 @@ def run(db, proc, tier=1, reverse=False, gear=None):
         elif op == 'draw': rig.draw(st[1] if len(st) > 1 else None)
         elif op == 'swap': rig.swap()
         elif op == 'spill': rig.spill()
+        elif op == 'add': rig.add(st[1], st[2], st[3] if len(st) > 3 else None)
         elif op == 'heat': rig.heat(st[1])
         elif op == 'inject': rig.inject()
         else: raise ValueError(op)

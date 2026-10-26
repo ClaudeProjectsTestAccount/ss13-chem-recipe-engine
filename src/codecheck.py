@@ -130,10 +130,11 @@ def diff_dbs(old, new):
 def critical_set(db):
     """reaction shorts and reagent names used by the verified recipes in recipes.py, found by running them through the engine"""
     import chemcli
-    from recipes import RECIPES
+    import planner
+    from recipes import all_recipes
     shorts = set()
-    for key, title, payload, ops in RECIPES:
-        try: rig = chemcli._run(db, ops, 1, False)
+    for key, title, ops, gspec in all_recipes():
+        try: rig = chemcli._run(db, ops, 1, False, planner.Gear(**gspec))
         except Exception: continue            # a recipe that cannot run on this rule set contributes nothing here
         for st in rig.steps:
             for l in st['log']:
@@ -148,13 +149,17 @@ def critical_set(db):
 def recheck_recipes(old, new):
     """run every verified recipe on both rule sets -> [(key, title, 'FAILS: why' | 'RESULT CHANGED: a -> b')]"""
     import chemcli
-    from recipes import RECIPES
+    import planner
+    from recipes import all_recipes
     bad = []
-    for key, title, payload, ops in RECIPES:
-        try: a = chemcli.signature(chemcli._run(old, ops, 1, False))
+    for key, title, ops, gspec in all_recipes():
+        g = planner.Gear(**gspec)
+        try:
+            r0 = chemcli._run(old, ops, 1, False, g); a = chemcli.signature(r0)
+            if r0.sim.warnings: a = a + (('warnings', tuple(r0.sim.warnings)),)
         except Exception as ex: continue                     # was already broken on the snapshot
         try:
-            r = chemcli._run(new, ops, 1, False); b = chemcli.signature(r)
+            r = chemcli._run(new, ops, 1, False, g); b = chemcli.signature(r)
             if r.sim.warnings: b = b + (('warnings', tuple(r.sim.warnings)),)
         except Exception as ex: bad.append((key, title, 'FAILS on the new rules: %s' % ex)); continue
         if a != b: bad.append((key, title, 'RESULT CHANGED: %s  ->  %s' % (a, b)))
