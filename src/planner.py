@@ -7,6 +7,7 @@ from collections import OrderedDict
 import chemlib
 from chemlib import Sim, Holder, DB
 
+CLICKS_BIGGEST_FIRST = True        # order the clicks of one dispense step (the step text lists the biggest first); chemcli.verify_orders also tries the other way
 DISP_AMOUNTS = [100, 50, 30, 25, 20, 15, 10, 5]   # chem dispenser click sizes (independent of the borg's beaker)
 
 # ---- gear tables, read from the Monkestation source (reagent_containers/cups/_cup.dm, bottle.dm, syringes.dm)
@@ -116,7 +117,7 @@ class Rig:
             raise ValueError('%s is not dispensable at this dispenser tier' % self.db.name(p))
         if units % 5: raise ValueError('dispenser can only deliver multiples of 5u')
         tgt = self.active
-        clicks = click_plan(units)
+        clicks = sorted(click_plan(units), reverse=CLICKS_BIGGEST_FIRST)
         for a in clicks:
             to_disp = max(0, min(a, tgt.max - tgt.total))
             if to_disp < a: self.sim.warnings.append('%s full: dispenser click of %du was clamped to %du' % (tgt.name, a, to_disp))
@@ -154,14 +155,19 @@ class Rig:
         """chem_heater.dm process(): each tick adjust_thermal_energy((target-T)*coeff*dt*SH*volume) then handle_reactions().
         That is dT = (target-T)*coeff*dt.  Step dt=1s; report when the first reaction fires and when target is reached."""
         b = self.beaker; t = 0; fired = None
-        while abs(kelvin - b.temp) > 1 and t < 600:
-            b.temp += (kelvin - b.temp) * coeff * 1.0
+        while abs(kelvin - b.temp) > 0.5 and t < 900:
+            hc = b.heat_capacity()      # chem_heater: adjust_thermal_energy(dT * coeff * dt * SPECIFIC_HEAT_DEFAULT * volume) -> dT = J / heat capacity
+            if hc: b.temp += (kelvin - b.temp) * coeff * 1.0 * chemlib.SH_DEFAULT * b.total / hc
             t += 1
             n = len(self.sim.log)
             b.handle_reactions()
             if fired is None and len(self.sim.log) > n:
                 fired = (t, round(b.temp))
-        if abs(kelvin - b.temp) <= 1: b.temp = float(kelvin)
+        # the temperature only approaches the target (it never lands exactly on it), so a reaction that needs
+        # exactly the target (or a hair below it) never fires: say so instead of snapping to the target
+        for rx in getattr(b, 'too_cold', []):
+            if rx.required_temp <= kelvin + 1e-9 and b.temp < rx.required_temp:
+                self.sim.warnings.append('%s needs %dK but the heater only approaches %dK (never reaches it): set the heater at least 10K higher' % (rx.short, rx.required_temp, kelvin))
         msg = 'Heater: set target %dK, put the beaker in' % kelvin
         if fired: msg += ' - the reaction fires after ~%ds (beaker ~%dK); you can take it out then' % fired
         msg += ' [heater speed %.2f]' % coeff

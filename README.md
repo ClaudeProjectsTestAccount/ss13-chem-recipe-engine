@@ -6,7 +6,7 @@ It reads the real chemistry rules out of the game's source code, simulates them 
 ## 📖 The recipe book
 
 **[Open the recipe book](https://htmlpreview.github.io/?https://github.com/ClaudeProjectsTestAccount/ss13-chem-recipe-engine/blob/main/docs/index.html)** (one self-contained page, [`docs/index.html`](docs/index.html); you can also just download and open it). Everything starts collapsed:
-pick a section, a gear tier (100u / 300u beaker x 15u / 60u syringe), a recipe type (cleaning, slipping, combat, medical, walls) and follow the numbered steps. The page includes the how-to-use guide.
+pick a section (medborg chem nades, or plain chemistry recipes), a gear tier (nades: 100u / 300u beaker x 15u / 60u syringe; chemistry: 50u / 100u beaker), a recipe type and follow the numbered steps. The page includes the how-to-use guide.
 
 Notes on how the chemistry behaves (foam vs smoke, edge cases, oddities): [`docs/CHEM_NOTES.md`](docs/CHEM_NOTES.md).
 
@@ -25,6 +25,18 @@ python3 src/chemcli.py book rebuild         # regenerate docs/index.html
 ```
 
 `publish` refuses a recipe the engine cannot model, one that overflows the beaker, or one that makes a hazard for the borg (for example phlogiston without stabilizing agent). Types: `cleaning`, `slip`, `hell`, `med`, `walls`, `other`. A recipe is listed under every syringe it works with (a 10u draw works on both, a 15u draw only on the stock one).
+
+## Plain chemicals (no nade): `chems` and `make`
+
+The second section of the page is ordinary chemistry from the dispenser alone (libital, mutadone, oculine, ...). One command plans a chemical, runs the plan through the engine and files it:
+
+```
+python3 src/chemcli.py chems [--labelled]                         # every chemical the basic dispenser can make alone (95), with raw cost and heat
+python3 src/chemcli.py make mutadone oculine --beaker 50,100      # plan only: prints the dispenser steps and yield
+python3 src/chemcli.py make --beaker 50,100 --publish             # no names = every entry of data/chem_meta.json; files them and rewrites the page once
+```
+
+`src/chemplan.py` finds the cheapest instant-reaction route down to dispensable raws, tries every reaction size, rounds raws up to the dispenser's 5u clicks, simulates each candidate, nudges each raw by 5u, drops heater steps the simulation shows are unnecessary, and keeps the plan that yields the most product without overflow and whose result does not depend on click order. Labels (type, one-line tag, harm, caution) live in `data/chem_meta.json`; the description, overdose threshold and metabolism rate come from the game source. Chemicals that need a plasma catalyst, a cold recipe or another department are not buildable and say so.
 
 ## Ask the planner for a new recipe
 
@@ -76,7 +88,7 @@ What is Monkestation-specific, and what to check on another server:
 
 ## Roadmap
 
-This is meant to grow into a general recipe generator: **bartender drinks**, and **non-borg chem mixes** that take advantage of everything a player controls - bigger and more containers, chem bags, bottles, the chem master. Today it is borg-only. A **service borg** may also be able to use parts of it (it carries a beaker apparatus and a drink dispenser, but no syringe) - that needs verifying. Details and open questions: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+This is meant to grow into a general recipe generator: **bartender drinks**, and **non-borg chem mixes** that take advantage of everything a player controls - bigger and more containers, chem bags, bottles, the chem master. Today the book has the medborg nades and a plain-chemistry section (no upgrades). A **service borg** may also be able to use parts of it (it carries a beaker apparatus and a drink dispenser, but no syringe) - that needs verifying. Details and open questions: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## What is verified and what is not
 
@@ -96,4 +108,4 @@ python3 -m unittest discover -s tests -v
 `tests/legacy_checks.py` holds the original source-cited checks; new tests go in their own `tests/test_*.py` files (shared helpers in `tests/helpers.py`, including a tiny fake game tree for end-to-end tool tests).
 
 ## Layout
-`src/dmparse.py` DM parser - `chemlib.py` reaction simulator - `planner.py` borg rig and `Gear` - `search.py` design search - `chemcli.py` CLI - `book.py` recipe book and page builder (`page_template.html` is the page, `data/recipe_book.json` the recipes) - `codecheck.py` / `wikicheck.py` change detection - `recipes.py` hands the book to `codecheck.py` - `chemdata.json` rules snapshot (Monkestation2.0 commit recorded inside). See [`NOTICE.md`](NOTICE.md) for licensing (AGPL-3.0) and attribution.
+`src/dmparse.py` DM parser - `chemlib.py` reaction simulator - `planner.py` borg rig and `Gear` - `chemplan.py` plain-chemical planner (`data/chem_meta.json` holds its labels) - `search.py` design search - `chemcli.py` CLI - `book.py` recipe book and page builder (`page_template.html` is the page, `data/recipe_book.json` the recipes) - `codecheck.py` / `wikicheck.py` change detection - `recipes.py` hands the book to `codecheck.py` - `chemdata.json` rules snapshot (Monkestation2.0 commit recorded inside). See [`NOTICE.md`](NOTICE.md) for licensing (AGPL-3.0) and attribution.

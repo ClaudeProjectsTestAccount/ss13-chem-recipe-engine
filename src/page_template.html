@@ -70,6 +70,7 @@ details.group:not([open]) .hint .o{display:none}
 .planned{margin:1rem 0}
 .planned .pl{border:2px dashed var(--line);border-radius:14px;padding:.75rem .95rem;margin:.6rem 0;color:var(--mute)}
 .planned .pl b{color:var(--ink)}
+details.group>summary.hero.nofig{grid-template-columns:1fr}
 @media (max-width:560px){details.group>summary.hero{grid-template-columns:1fr}.hero-img{aspect-ratio:640/420;object-fit:cover}}
 .hidden{display:none!important}
 .empty{color:var(--mute);padding:.6rem .95rem}
@@ -83,7 +84,7 @@ a{color:var(--accent)}
 <p class="lede">Recipes the chemistry simulator has worked out from the game code. Sections are collapsed to start with: open one, pick a gear tier, open a type, open a recipe and follow the numbered steps.</p>
 
 <div class="bar">
-  <input id="q" type="search" placeholder="Filter recipes (e.g. hell, lube, wall, heal)" aria-label="Filter recipes">
+  <input id="q" type="search" placeholder="Filter recipes (e.g. hell, lube, wall, libital)" aria-label="Filter recipes">
   <button id="expand" type="button">Expand all</button>
   <button id="collapse" type="button">Collapse all</button>
 </div>
@@ -133,9 +134,31 @@ a{color:var(--accent)}
 <div id="tiers"></div>
 </div></details>
 
+<details class="group" id="g-chem"><summary class="hero nofig">
+  <div class="hero-text">
+    <span class="eyebrow">Section 2 &middot; Chemistry recipes, no upgrades</span>
+    <h2>Chemistry recipes</h2>
+    <p>Medicines and useful chemicals anyone can make from a chem dispenser alone: no other department, no special ingredients. Pick your beaker size inside.</p>
+    <dl class="meta" id="cmeta"></dl>
+    <span class="hint"><span class="c">&#9656; Click to open the chemistry recipes</span><span class="o">&#9662; Click to close</span></span>
+  </div></summary>
+<div class="group-body">
+<details class="guide" id="cguide"><summary>How to read a chemistry recipe <span class="sub">clicks, heating, leftovers</span></summary>
+<div class="body">
+<ul>
+<li>Do the steps in order, in one beaker. The grey line under each step is what the beaker should hold afterwards: use it to catch a wrong click.</li>
+<li>"Dispenser: 25u water (a 25u click)" means that button. The dispenser offers 5, 10, 15, 20, 25, 30, 50 and 100 unit buttons and a click never adds more than the free space in the beaker, so a recipe can end on a click that fills the beaker exactly.</li>
+<li>"Heat to 390 K" means a <b>chem heater</b>. It only approaches the target temperature, so recipes aim 20 K above what the reaction needs. Wait until the beaker is at that temperature.</li>
+<li>Every reaction here is instant (pH and purity are switched off on this server). A recipe sometimes makes by-products or leaves a few units of an ingredient: the Result line says what, and none of it matters for the product.</li>
+<li>Dosing lines come from the reagent code: the overdose threshold and how long 1u lasts in the blood.</li>
+<li>Nothing here has been tested in a live round.</li>
+</ul>
+</div></details>
+<div id="ctiers"></div>
+</div></details>
+
 <div class="planned" aria-label="Planned sections">
   <div class="pl"><b>Planned: other borg types.</b> Service and any other cyborg with the tools. Similar recipes with small differences (usually one beaker, possibly no syringe upgrade). Which borgs can do this still has to be checked in the code.</div>
-  <div class="pl"><b>Planned: chemistry recipes for people, not nades.</b> Good healing and utility chems (mutadone, oculine and the like) made quickly with no upgrades.</div>
 </div>
 
 
@@ -152,6 +175,7 @@ var TIERS = [[100,15,'Stock medborg','the borg-default 100u beaker and the stock
              [300,15,'Big beaker','300u bluespace beaker, stock 15u syringe'],
              [300,60,'Both upgrades','300u bluespace beaker and 60u bluespace syringe'],
              [0,0,'Any gear','these need neither a syringe nor a big beaker']];
+var CTIERS = [[50,'Regular 50u beaker','the plain beaker everyone has'],[100,'Large 100u beaker','large beaker; also the medborg default'],[300,'Bluespace 300u beaker','needs the bluespace beaker']];
 var HARM = {safe:'harmless',caution:'use with care',danger:'dangerous: Law 1 applies'};
 
 function el(tag, cls, text){ var e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; }
@@ -168,6 +192,10 @@ function stepText(t){
 
 function summaryChips(r){
   var s=r.summary, c=el('div','chips');
+  if(s.kind==='chem'){
+    c.appendChild(chip('makes '+s.made+'u '+s.product)); c.appendChild(chip(s.raw+'u of ingredients'));
+    c.appendChild(chip('beaker '+s.fill+'% full at peak')); c.appendChild(chip(HARM[r.harm]||r.harm, r.harm)); return c;
+  }
   if(s.kind==='foam'||s.kind==='smoke'){
     c.appendChild(chip(s.kind+', '+s.tiles+' tiles'));
     if(s.per_tick!=null) c.appendChild(chip(s.per_tick+'u per tile per tick'));
@@ -197,6 +225,9 @@ function recipeCard(r, tier){
   b.appendChild(ol);
   r.results.forEach(function(l){ b.appendChild(kv('Result:', l)); });
   var o=r.order;
+  if(r.group==='chem'){
+    if(o.same!==o.total || o.clicks_ok===false || o.reverse_ok===false) b.appendChild(kv('Order:', 'ORDER MATTERS: follow the steps exactly (the order of clicks changes the result).', 'warn'));
+  } else
   b.appendChild(kv('Order:', o.same===o.total ? 'any dispense order gives this result.' : 'ORDER MATTERS: only '+o.same+' of '+o.total+' dispense orders work, follow the steps exactly.'));
   if(r.notes) b.appendChild(kv('Notes:', r.notes));
   if(r.caution) b.appendChild(kv('Caution:', r.caution));
@@ -205,10 +236,11 @@ function recipeCard(r, tier){
   return d;
 }
 
-function fits(r,b,s){ return b===0 ? r.beaker===0 : (r.beaker===b && r.syringes.indexOf(s)>=0); }
+function isChem(r){ return r.group==='chem'; }
+function fits(r,b,s){ if(isChem(r)) return false; return b===0 ? r.beaker===0 : (r.beaker===b && r.syringes.indexOf(s)>=0); }
 
 function buildMeta(){
-  var rs=DATA.recipes, tiles=0, foam=0, smoke=0, other=0;
+  var rs=DATA.recipes.filter(function(r){return !isChem(r);}), tiles=0, foam=0, smoke=0, other=0;
   rs.forEach(function(r){ var k=r.summary.kind; if(k==='foam')foam++; else if(k==='smoke')smoke++; else other++; if(r.summary.tiles>tiles) tiles=r.summary.tiles; });
   var rows=[['Recipes', rs.length+' ('+foam+' foam, '+smoke+' smoke'+(other?', '+other+' other':'')+')'],
             ['Gear tiers','100u / 300u beaker x 15u / 60u syringe'],
@@ -220,6 +252,29 @@ function buildMeta(){
             ['Rules snapshot', DATA.rules]];
   var dl=document.getElementById('meta');
   rows.forEach(function(r){ var d=el('div'); d.appendChild(el('dt',null,r[0])); d.appendChild(el('dd',null,r[1])); dl.appendChild(d); });
+}
+function buildChem(){
+  var cs=DATA.recipes.filter(isChem), root=document.getElementById('ctiers');
+  var heated=cs.filter(function(r){return r.needs.some(function(n){return /heater/.test(n);});}).length;
+  var dl=document.getElementById('cmeta');
+  [['Recipes',cs.length+' ('+heated+' need a chem heater)'],['Beakers','50u regular, 100u large, 300u bluespace'],['Needs','a chem dispenser with the basic reagent list'],['Rules snapshot',DATA.rules]].forEach(function(r){
+    var d=el('div'); d.appendChild(el('dt',null,r[0])); d.appendChild(el('dd',null,r[1])); dl.appendChild(d); });
+  CTIERS.forEach(function(T){
+    var rs=cs.filter(function(r){return r.beaker===T[0];});
+    if(!rs.length && T[0]===300) return;
+    var tier=el('details','tier'); tier.dataset.tier='c'+T[0];
+    var sm=el('summary'); sm.appendChild(el('span',null,T[1])); sm.appendChild(el('span','sub',T[2]));
+    sm.appendChild(el('span','count', rs.length+' recipe'+(rs.length===1?'':'s'))); tier.appendChild(sm);
+    var body=el('div'); tier.appendChild(body);
+    if(!rs.length) body.appendChild(el('div','empty','No recipes here yet.'));
+    DATA.chem_types.forEach(function(ty){
+      var tr=rs.filter(function(r){return r.type===ty[0];}); if(!tr.length) return;
+      var g=el('details','type'); g.dataset.type=ty[0];
+      var gs=el('summary'); gs.appendChild(el('span',null,ty[1])); gs.appendChild(el('span','count',tr.length+(tr.length===1?' recipe':' recipes'))); g.appendChild(gs);
+      var gb=el('div'); g.appendChild(gb); tr.forEach(function(r){ gb.appendChild(recipeCard(r)); }); body.appendChild(g);
+    });
+    root.appendChild(tier);
+  });
 }
 function build(){
   var root=document.getElementById('tiers');
@@ -248,7 +303,7 @@ function build(){
     });
     root.appendChild(tier);
   });
-  document.getElementById('foot').textContent = DATA.recipes.length+' recipes. Generated from the game rules snapshot '+DATA.rules+' by the ss13-chem-recipe-engine. The numbers come from the simulator; none of it has been tested in a live round yet.';
+  document.getElementById('foot').textContent = DATA.recipes.length+' recipes ('+DATA.recipes.filter(isChem).length+' chemistry). Generated from the game rules snapshot '+DATA.rules+' by the ss13-chem-recipe-engine. The numbers come from the simulator; none of it has been tested in a live round yet.';
 }
 
 function setAll(open){ document.querySelectorAll('details').forEach(function(d){ d.open=open; }); }
@@ -272,7 +327,7 @@ function applyFilter(){
     t.classList.toggle('hidden', q && n===0);
     if(q) t.open = n>0;
   });
-  var gr=document.getElementById('g-medborg'); if(q) gr.open = gr.querySelectorAll('details.recipe:not(.hidden)').length>0;
+  ['g-medborg','g-chem'].forEach(function(id){ var gr=document.getElementById(id); if(q) gr.open = gr.querySelectorAll('details.recipe:not(.hidden)').length>0; });
 }
 document.getElementById('q').addEventListener('input', applyFilter);
 
@@ -283,7 +338,7 @@ function openHash(){
   t.scrollIntoView({block:'start'});
 }
 window.addEventListener('hashchange', openHash);
-build(); buildMeta(); openHash();
+build(); buildChem(); buildMeta(); openHash();
 })();
 </script>
 </body>

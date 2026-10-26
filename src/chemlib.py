@@ -29,6 +29,15 @@ FOAM_MIN_DILUTION = 25  # DIAMOND_AREA(3)
 DEFAULT_TEMP = 300      # DEFAULT_REAGENT_TEMPERATURE
 SH_DEFAULT = 200        # SPECIFIC_HEAT_DEFAULT
 
+def _eval_metab(txt):
+    """metabolization_rate is written like '0.5 * REAGENTS_METABOLISM'; REAGENTS_METABOLISM = 0.2 u per second"""
+    if not txt: return None
+    t = txt.replace('REAGENTS_METABOLISM', '0.2').replace('REAGENTS_EFFECT_MULTIPLIER', '1').strip()
+    if re.fullmatch(r'[0-9.+*/() ]+', t):
+        try: return round(float(eval(t)), 4)
+        except Exception: return None
+    return None
+
 def byond_round(x):
     """BYOND round(x) with one argument: nearest integer, .5 rounds up (away from zero)."""
     return math.floor(x + 0.5 + 1e-9) if x >= 0 else -math.floor(-x + 0.5 + 1e-9)
@@ -43,6 +52,7 @@ class Reagent:
     def __init__(self, path):
         self.path = path; self.name = None; self.creation_purity = 1.0
         self.specific_heat = SH_DEFAULT; self.flags = ''
+        self.description = ''; self.overdose = 0.0; self.metab = None     # what the reagent does / overdose threshold (0 = none) / units burned per second
 class Reaction:
     def __init__(self, path):
         self.path = path; self.results = {}; self.req = OrderedDict(); self.cat = {}
@@ -90,7 +100,8 @@ class DB:
     def to_json(self, path):
         import json
         out = {'meta': self.meta, 'dispensers': {str(k): v for k, v in self.dispensers.items()},
-               'reagents': {p: dict(name=r.name, creation_purity=r.creation_purity, specific_heat=r.specific_heat)
+               'reagents': {p: dict(name=r.name, creation_purity=r.creation_purity, specific_heat=r.specific_heat,
+                                    description=r.description, overdose=r.overdose, metab=r.metab)
                             for p, r in self.reagents.items()},
                'reactions': [dict(path=r.path, order=r.order, source=r.source, req=list(r.req.items()),
                                   results=list(r.results.items()), cat=list(r.cat.items()),
@@ -106,6 +117,7 @@ class DB:
         self.dispensers = {int(k): v for k, v in d['dispensers'].items()}
         for p, r in d['reagents'].items():
             x = Reagent(p); x.name = r['name']; x.creation_purity = r['creation_purity']; x.specific_heat = r['specific_heat']
+            x.description = r.get('description', ''); x.overdose = r.get('overdose', 0.0); x.metab = r.get('metab')
             self.reagents[p] = x
         for r in d['reactions']:
             x = Reaction(r['path']); x.order = r['order']; x.source = r['source']
@@ -144,6 +156,12 @@ class DB:
             if sh:
                 v = dmparse.parse_num(sh.replace('SPECIFIC_HEAT_DEFAULT', '200'))
                 if v: r.specific_heat = v
+            ds, _ = dmparse.resolve_chain(self.rdefs, path, 'description')
+            if ds: r.description = ds.strip().strip('"').replace('\\"', '"')
+            od, _ = dmparse.resolve_chain(self.rdefs, path, 'overdose_threshold')
+            r.overdose = dmparse.parse_num(od) or 0.0 if od else 0.0
+            mb, _ = dmparse.resolve_chain(self.rdefs, path, 'metabolization_rate')
+            r.metab = _eval_metab(mb)
             self.reagents[path] = r
         # reactions
         for path, d in sorted(self.cdefs.items(), key=lambda kv: kv[1].order):
@@ -242,6 +260,7 @@ class Holder:
         self.temp = 150.0
         self.total = 0.0
         self.is_reacting = False
+        self.too_cold = []          # reactions that had every ingredient but not the temperature at the last handle_reactions
 
     # ---- bookkeeping
     def update_total(self):
@@ -352,6 +371,7 @@ class Holder:
         if not self.r: return False
         if self.flags & Holder.NO_REACT: return False
         possible = []
+        self.too_cold = []
         for p in list(self.r):
             lst = db.index.get(p, [])
             if sim.reverse_same_primary: lst = list(reversed(lst))
@@ -364,6 +384,8 @@ class Holder:
                           (not rx.is_cold and self.temp >= rx.required_temp))
                 if tempok:
                     possible.append(rx)
+                else:
+                    self.too_cold.append(rx)
         n = 0
         for rx in possible:
             if rx.non_instant and not (self.flags & Holder.INSTANT):
@@ -378,7 +400,7 @@ class Holder:
         sim = self.sim
         mult = math.inf
         for q, a in rx.req.items():
-            mult = min(mult, byond_round(self.amount(q) / a))
+            mult = min(mult, byond_round(round_q(self.amount(q)) / a))
         if mult == 0: return False
         sum_purity = 0.0
         for q in rx.req:
@@ -418,6 +440,8 @@ def _foam(sim, holder, rx, mult):
     if not m:
         sim.effects.append({'kind': 'UNMODELED', 'reaction': rx.short, 'tags': ['foam(unparsed)'], 'mult': mult}); return
     ftype = m.group(1).split('/')[-1]
+    if holder.name == 'foam tile':
+        sim.warnings.append('leftover ingredients re-fired the %s reaction INSIDE the foam (x3.2 amounts): an extra foam of %d tiles spawns' % (rx.short, (float(m.group(2)) * mult if m.group(2) else float(m.group(3)))))
     size = float(m.group(2)) * mult if m.group(2) else float(m.group(3))
     scale = FOAM_SCALE * (30 / 8) if ftype == 'long' else FOAM_SCALE
     # foam.set_up(carry = src): carry.copy_to(chemholder, total)   (chemholder is NO_REACT)

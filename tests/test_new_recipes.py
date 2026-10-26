@@ -87,6 +87,7 @@ class RecipeTable(unittest.TestCase):
 
     def test_all_recipes_run_without_unmodeled_effects_or_warnings(self):
         for rid, r in self.book.items():
+            if r.get('group') == 'chem': continue          # plain chemicals have their own tests (test_chemplan.py)
             rig = run(self.db, [tuple(o) for o in r['ops']], book.gear_of(r))
             self.assertEqual(effects(rig, 'UNMODELED'), [], rid)
             self.assertEqual(effects(rig, 'HAZARD'), [], rid)

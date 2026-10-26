@@ -1,0 +1,243 @@
+{
+ "_doc": "Hand-written labels for plain chemical recipes (chemcli make). Key = reagent path tail. type: heal crit cure boost util tox other. harm: safe caution danger. what/tag/caution are optional; 'what' defaults to the reagent's own description from the game code.",
+ "libital": {
+  "type": "heal",
+  "tag": "brute (bruises)",
+  "harm": "caution",
+  "caution": "Costs minor liver damage for as long as it is in the blood."
+ },
+ "aiuri": {
+  "type": "heal",
+  "tag": "burns",
+  "harm": "caution",
+  "caution": "Costs minor eye damage for as long as it is in the blood."
+ },
+ "helbital": {
+  "type": "heal",
+  "tag": "brute, stronger the closer to death",
+  "harm": "caution"
+ },
+ "probital": {
+  "type": "heal",
+  "tag": "fast brute repair",
+  "harm": "caution"
+ },
+ "sal_acid": {
+  "type": "heal",
+  "tag": "severe brute, fast",
+  "harm": "caution"
+ },
+ "oxandrolone": {
+  "type": "heal",
+  "tag": "severe burns, fast",
+  "harm": "caution"
+ },
+ "lenturi": {
+  "type": "heal",
+  "tag": "burns",
+  "harm": "caution",
+  "caution": "Slows the patient while it is in the blood and hurts the stomach when it leaves."
+ },
+ "granibitaluri": {
+  "type": "heal",
+  "tag": "mild painkiller and small-wound healer",
+  "harm": "safe"
+ },
+ "mine_salve": {
+  "type": "heal",
+  "tag": "painkiller plus brute and burn",
+  "harm": "caution",
+  "caution": "Hides pain, so a patient may not notice how hurt they are."
+ },
+ "salglu_solution": {
+  "type": "heal",
+  "tag": "brute, burn and a blood substitute",
+  "harm": "safe"
+ },
+ "convermol": {
+  "type": "heal",
+  "tag": "oxygen damage, fast",
+  "harm": "caution",
+  "caution": "Makes a little toxin damage while it heals."
+ },
+ "tirimol": {
+  "type": "heal",
+  "tag": "oxygen damage",
+  "harm": "caution",
+  "caution": "Puts the patient to sleep once it has metabolised."
+ },
+ "salbutamol": {
+  "type": "heal",
+  "tag": "oxygen damage, fast",
+  "harm": "safe"
+ },
+ "cryoxadone": {
+  "type": "heal",
+  "tag": "everything, in a cold patient",
+  "harm": "safe",
+  "caution": "Only works while the patient is below 270 K (a cryo cell)."
+ },
+ "multiver": {
+  "type": "cure",
+  "tag": "purges chems, mild toxin heal",
+  "harm": "caution",
+  "caution": "Can hurt the lungs unless the patient has several other medicines."
+ },
+ "calomel": {
+  "type": "cure",
+  "tag": "purges every chem",
+  "harm": "caution",
+  "caution": "Hurts healthy people with toxin damage."
+ },
+ "ammoniated_mercury": {
+  "type": "cure",
+  "tag": "fast toxin purge",
+  "harm": "caution"
+ },
+ "antihol": {
+  "type": "cure",
+  "tag": "sobers someone up",
+  "harm": "safe"
+ },
+ "naloxone": {
+  "type": "cure",
+  "tag": "narcotic antidote",
+  "harm": "safe"
+ },
+ "potass_iodide": {
+  "type": "cure",
+  "tag": "radiation",
+  "harm": "safe"
+ },
+ "mutadone": {
+  "type": "cure",
+  "tag": "genetic defects",
+  "harm": "safe"
+ },
+ "oculine": {
+  "type": "cure",
+  "tag": "eye damage, blindness",
+  "harm": "safe"
+ },
+ "inacusiate": {
+  "type": "cure",
+  "tag": "ear damage, deafness",
+  "harm": "safe"
+ },
+ "higadrite": {
+  "type": "cure",
+  "tag": "damaged livers",
+  "harm": "safe"
+ },
+ "neurine": {
+  "type": "cure",
+  "tag": "minor brain traumas",
+  "harm": "safe"
+ },
+ "mannitol": {
+  "type": "cure",
+  "tag": "brain damage",
+  "harm": "caution"
+ },
+ "diphenhydramine": {
+  "type": "cure",
+  "tag": "allergic reactions and jitters",
+  "harm": "safe"
+ },
+ "psicodine": {
+  "type": "cure",
+  "tag": "anxiety",
+  "harm": "caution"
+ },
+ "haloperidol": {
+  "type": "cure",
+  "tag": "purges stimulants and hallucinogens",
+  "harm": "caution",
+  "caution": "Slows stamina regeneration."
+ },
+ "spaceacillin": {
+  "type": "cure",
+  "tag": "slows diseases",
+  "harm": "safe"
+ },
+ "epinephrine": {
+  "type": "crit",
+  "tag": "slowly heals a patient in crit",
+  "harm": "safe"
+ },
+ "atropine": {
+  "type": "crit",
+  "tag": "rapidly stabilises a patient in crit",
+  "harm": "caution"
+ },
+ "ephedrine": {
+  "type": "boost",
+  "tag": "stun resistance and speed",
+  "harm": "caution"
+ },
+ "synaptizine": {
+  "type": "boost",
+  "tag": "stun resistance, wakefulness",
+  "harm": "safe"
+ },
+ "morphine": {
+  "type": "boost",
+  "tag": "painkiller",
+  "harm": "caution",
+  "caution": "Drowsiness and sleep at high doses."
+ },
+ "chloralhydrate": {
+  "type": "boost",
+  "tag": "sedative: confusion, then sleep",
+  "harm": "danger",
+  "caution": "Knocks the target out, then poisons them. Law 1 applies."
+ },
+ "space_cleaner": {
+  "type": "util",
+  "tag": "cleans the floor and items",
+  "harm": "safe"
+ },
+ "sterilizine": {
+  "type": "util",
+  "tag": "sterilises wounds before surgery",
+  "harm": "safe"
+ },
+ "drying_agent": {
+  "type": "util",
+  "tag": "dries wet floors and lube",
+  "harm": "safe"
+ },
+ "firefighting_foam": {
+  "type": "util",
+  "tag": "puts out fires",
+  "harm": "safe"
+ },
+ "hydrogen_peroxide": {
+  "type": "util",
+  "tag": "mild antiseptic and an ingredient",
+  "harm": "safe"
+ },
+ "stabilizing_agent": {
+  "type": "util",
+  "tag": "stops volatile reactions (needed for phlogiston)",
+  "harm": "safe"
+ },
+ "lube": {
+  "type": "util",
+  "tag": "slippery floors",
+  "harm": "caution",
+  "caution": "Do not use on crew who must keep their footing."
+ },
+ "formaldehyde": {
+  "type": "util",
+  "tag": "stops dead bodies rotting",
+  "harm": "caution",
+  "caution": "A weak toxin in the living."
+ },
+ "sulfonal": {
+  "type": "tox",
+  "tag": "stealth sleep poison",
+  "harm": "danger",
+  "caution": "A poison. Law 1 applies."
+ }
+}

@@ -222,13 +222,19 @@ def signature(rig):
     out = []
     for e in rig.sim.effects:
         out.append((e['kind'], e.get('tiles'), tuple(sorted((k, round(v, 1)) for k, v in e.get('tile', {}).items())), e.get('range'), e.get('max')))
+    out.append(('beaker', tuple(sorted((k, round(v[0], 1)) for k, v in rig.beaker.r.items()))))     # what is left in the beaker (the product of a plain chem recipe)
     return tuple(out)
 
 def verify_orders(db, ops, tier, gear=None):
     """order robustness: (1) same-primary reaction-order reversed  (2) every permutation of consecutive dispense runs"""
     base = _run(db, ops, tier, False, gear); sig = signature(base)
     rev = _run(db, ops, tier, True, gear)
-    report = {'reverse_index_order_same': signature(rev) == sig, 'perm_total': 0, 'perm_same': 0, 'bad_orders': []}
+    # the clicks inside one dispense step (e.g. 45u = 30 + 15): biggest first is what the step text says; smallest first must give the same result
+    planner.CLICKS_BIGGEST_FIRST = False
+    try: small = signature(_run(db, ops, tier, False, gear))
+    except Exception: small = None
+    finally: planner.CLICKS_BIGGEST_FIRST = True
+    report = {'reverse_index_order_same': signature(rev) == sig, 'clicks_order_same': small == sig, 'perm_total': 0, 'perm_same': 0, 'bad_orders': []}
     # segment dispense runs (split at non-dispense ops)
     segs = []; cur = []
     for i, o in enumerate(ops):
@@ -371,6 +377,50 @@ def book_cmd(args):
     for w in comp['warnings']: print('  engine note:', w)
     print('  wrote docs/index.html; commit data/recipe_book.json + docs/index.html')
 
+def chem_cmd(args):
+    import chemplan, book
+    db = DB(); meta = chemplan.load_meta()
+    if args.cmd == 'chems':
+        b = chemplan.buildable(db); filed = {r['payload'] for r in book.load_book() if r.get('group') == 'chem'} if os.path.exists(book.BOOK_PATH) else set()
+        rows = []
+        for p, t in b.items():
+            per = chemplan.raw_per_unit(t); heat = max([n.rx.required_temp for n in _nodes(t)] + [0])
+            rows.append((tail(p), db.name(p), sum(per.values()), heat, bool(chemplan.meta_for(db, p, meta)), db.name(p) in filed))
+        rows.sort(key=lambda r: (not r[4], r[1].lower()))
+        print('%d chemicals the basic dispenser can make alone (labelled = has an entry in data/chem_meta.json; filed = in the book)' % len(rows))
+        for short, name, raw, heat, lab, fl in rows:
+            if args.labelled and not lab: continue
+            print('%-22s %-28s %4.1fu raw/u %s%s%s' % (short, name, raw, ('heat %gK ' % heat) if heat > 300 else '', 'labelled ' if lab else '', 'filed' if fl else ''))
+        return
+    sizes = [int(x) for x in args.beaker.split(',')]
+    names = args.chems or [k for k in meta]
+    specs = []; t0 = time.time()
+    for n in names:
+        try: p = db.find_reagent(n)
+        except KeyError: print('%-20s unknown reagent' % n); continue
+        for bs in sizes:
+            res = chemplan.plan(db, p, bs)
+            if not res: print('%-20s %3du: no plan (not buildable from the dispenser alone, or nothing fits)' % (n, bs)); continue
+            if res['made'] < args.min_made: print('%-20s %3du: only %.1fu, skipped (--min-made %g)' % (n, bs, res['made'], args.min_made)); continue
+            ws = [w for w in res['rig'].sim.warnings]
+            sp = chemplan.make_spec(db, p, bs, res, meta); specs.append(sp)
+            print('%-20s %3du: %5.1fu from %du raw  %s%s' % (n, bs, res['made'], sum(o[2] for o in res['ops'] if o[0] == 'dispense'),
+                  '; '.join(('%s %s' % (o[1], o[2])) if o[0] == 'dispense' else 'heat %g' % o[1] for o in res['ops']), ('  WARN ' + '; '.join(ws)) if ws else ''))
+    if args.publish and specs:
+        recipes = book.load_book() if os.path.exists(book.BOOK_PATH) else []
+        ids = {s['id'] for s in specs}; recipes = [r for r in recipes if r['id'] not in ids]; ok = 0
+        for sp in specs:
+            try: e, comp, rep = book.add_recipe(sp, db=DB(json_path=os.path.join(book.HERE, 'chemdata.json')), write=False)
+            except (ValueError, KeyError) as ex: print('NOT filed %s: %s' % (sp['id'], ex)); continue
+            recipes.append(e); ok += 1
+        book.save_book(recipes); book.write_page(recipes=recipes)
+        print('filed %d of %d, wrote docs/index.html (%.0fs)' % (ok, len(specs), time.time() - t0))
+
+def _nodes(t):
+    yield t
+    for c in t.children.values():
+        if c is not None: yield from _nodes(c)
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest='cmd')
@@ -392,9 +442,15 @@ def main(argv=None):
     a.add_argument('--harm', default='caution'); a.add_argument('--what'); a.add_argument('--notes', default=''); a.add_argument('--caution', default='')
     a.add_argument('--src', default=''); a.add_argument('--rank', type=int, default=50, help='sort position inside its type group (lower = earlier)')
     a.add_argument('--allow-warnings', action='store_true', help='accept engine warnings (e.g. a deliberate clamped dispenser click)')
+    a = sub.add_parser('chems', help='list every chemical the basic dispenser can make alone'); a.add_argument('--labelled', action='store_true')
+    a = sub.add_parser('make', help='plan plain chemicals (no foam) from the dispenser; --publish files them in the book')
+    a.add_argument('chems', nargs='*', help='reagent names; none = every entry of data/chem_meta.json')
+    a.add_argument('--beaker', default='50,100', help='comma list of beaker volumes: 50, 100, 300'); a.add_argument('--publish', action='store_true')
+    a.add_argument('--min-made', type=float, default=10.0, help='skip a plan that makes less than this many units')
     a = sub.add_parser('book', help='recipe book: rebuild the page, list, rm'); a.add_argument('action', choices=['rebuild', 'list', 'rm']); a.add_argument('id', nargs='?')
     args = ap.parse_args(argv)
     if args.cmd in ('publish', 'book'): return book_cmd(args)
+    if args.cmd in ('chems', 'make'): return chem_cmd(args)
     db = DB()
     if args.cmd == 'reagent':
         p = db.find_reagent(args.name)
