@@ -94,3 +94,15 @@ What the chemistry code actually does, as found while building the recipe engine
 - The clicks (dispenser, beaker apparatus, syringe), whether a borg can use a chem heater, and whether a borg slips on foam.
 - Every effect that is only cited (walls, vortexes, mob spawns, fire and slip behaviour of the hell recipes). The simulator checks reagent amounts, tiles and per-tile doses, not what the effect does to a person.
 - How far foam actually spreads: tile counts are a **maximum**. Foam only fills open turf, so in a small room the real group size is smaller (less dilution, stronger foam) and in a corridor it runs long.
+
+## Effects, overdoses and foam / smoke exposure (stats system)
+
+Source of truth is the game code, parsed by script (no wiki needed): `src/effects.py` -> `data/chem_stats.json` (per-chemical life / overdose effects, metabolism, hooks), `src/gear.py` -> `data/gear_protection.json` (bio / fire armour per garment). Re-run both with `MONKE_SRC=<game checkout>` when the game snapshot changes. `data/chem_curated.json` is the hand-written layer (named special effects such as Slick / Ignite / Clean with tooltips, crit-only buffs, overdose-severity overrides).
+
+* Units: one Life tick = 2 s. Damage / healing numbers are per tick, NEGATIVE = healing. A chemical's per-tick effect does not depend on how much of it is in the blood, only on it being there; amount sets how long it lasts (1u lasts 1 / (2 x metabolization rate) ticks) and when the overdose starts.
+* Overdose of a mix: a chemical at share f of the mix overdoses after (its threshold / f) units of the whole mix are in the blood. Severity is about "HP per tick while overdosed" (2 brute per tick = 2.0; optional organs low), computed from the code with overrides in the curated file.
+* `src/chemstats.py` (profiles, mix analysis), `src/exposure.py` (foam / smoke model, protection scenarios), `src/statspanel.py` (the block the page draws; text output for the CLI).
+* CLI: `chemcli.py mix "libital 30, salicylic acid 15"`, `chemcli.py mix --recipe <id>`, `chemcli.py stats <chem>`.
+* Foam / smoke recipe cards get an Effects block: tile contents, per-chemical totals, the exposure rules, and a table of what a person takes by protection. A plain chemical recipe can show one too: give it a `mix` (name -> units) in the book.
+* Foam: 0.2 s ticks, 8 s life; each tick exposes every chemical in the tile by VAPOR; skin only absorbs an exposure of 0.5u or more after (1 - bio protection). Smoke: 2 s ticks, 20 s life; 10% of the tile per tick is breathed in unless internals are open, the target does not breathe, or a mask / glasses / hat blocks gas smoke. Contact effects (fire, acid, lube, cleaner) ignore armour.
+* Not modelled: liver efficiency, burning over time beyond fire stacks, chemical reactions inside the blood, extra exposures from foam spreading onto a person. Nothing here has been checked in-game yet.

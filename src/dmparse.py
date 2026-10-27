@@ -110,6 +110,7 @@ class Def:
         self.path, self.order, self.file = path, order, file
         self.vars = {}          # name -> raw string
         self.procs = {}         # procname -> body text
+        self.pind = {}          # procname -> [(indent, text)] (same lines, indentation kept: lets effects.py see if/else nesting)
         self.parent_path = None
 
 def _split_assign(text):
@@ -126,21 +127,22 @@ def _split_assign(text):
             return text[:i].strip(), text[i+1:].strip()
     return None
 
-def parse_file(path, rootkey, defs, order_counter):
+def parse_file(path, rootkey, defs, order_counter, root=None):
     """collect /datum/<rootkey>... definitions: var assignments + proc bodies"""
     src = strip_comments(open(path, encoding='utf-8', errors='replace').read())
-    root = '/datum/' + rootkey
+    root = root or ('/datum/' + rootkey)
     cur = None
     body = None            # list collecting a proc body
+    pbody = None
     for indent, text in logical_lines(src):
         if not text or text.startswith('#'):
             continue
         if body is not None:
             if indent >= 1:
-                body.append(text); continue
+                body.append(text); pbody.append((indent, text)); continue
             body = None
         if indent == 0 and text.startswith('/'):
-            mproc = re.match(r'(/datum/[\w/]*?)/(?:proc/)?(\w+)\s*\(.*\)\s*$', text)
+            mproc = re.match(r'(/(?:datum|obj|mob)/[\w/]*?)/(?:proc/)?(\w+)\s*\(.*\)\s*$', text)
             asg = _split_assign(text)
             if asg and asg[0].startswith(root):
                 lhs, rhs = asg
@@ -152,9 +154,9 @@ def parse_file(path, rootkey, defs, order_counter):
             elif mproc and mproc.group(1).startswith(root):
                 tp, name = mproc.group(1), mproc.group(2)
                 d = defs.get(tp) or defs.setdefault(tp, Def(tp, next(order_counter), path))
-                body = d.procs.setdefault(name, [])
+                body = d.procs.setdefault(name, []); pbody = d.pind.setdefault(name, [])
                 cur = d
-            elif re.match(r'/datum/[\w/]+$', text) and text.startswith(root):
+            elif re.match(r'/(?:datum|obj|mob)/[\w/]+$', text) and text.startswith(root):
                 d = defs.get(text) or defs.setdefault(text, Def(text, next(order_counter), path))
                 cur = d
             else:
@@ -168,7 +170,7 @@ def parse_file(path, rootkey, defs, order_counter):
                 continue
             mp2 = re.match(r'(?:proc/)?(\w+)\s*\(.*\)\s*$', text)
             if mp2:
-                body = cur.procs.setdefault(mp2.group(1), [])
+                body = cur.procs.setdefault(mp2.group(1), []); pbody = cur.pind.setdefault(mp2.group(1), [])
     return defs
 
 def resolve_chain(defs, path, key):

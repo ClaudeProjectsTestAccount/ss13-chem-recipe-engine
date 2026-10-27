@@ -1,0 +1,182 @@
+{
+ "_readme": "Hand-written meaning layered over chem_stats.json (game code). Keys: full reagent path. od_severity (about HP per tick while overdosed; 2 brute/tick = 2.0), od_note, status [{name,cls,tip}] (special effects, cls = buff|debuff), buffs [{name,cls,tip}] (healing effects that are not plain damage numbers), contact.",
+ "/datum/reagent/lube": {
+  "status": [
+   {
+    "name": "Slick",
+    "cls": "debuff",
+    "tip": "Floor contact: a tile with 1u or more of lube makes anyone who steps on it slip and slide. Each exposure keeps the floor lubed for 15 s plus 2 s per unit (max 120 s). Works through any clothing; nothing needs to get into the blood."
+   }
+  ]
+ },
+ "/datum/reagent/space_cleaner": {
+  "status": [
+   {
+    "name": "Clean",
+    "cls": "buff",
+    "tip": "Contact: washes the target and the floor tile (blood, grime, decals, chemical residue). The floor needs 1u or more per exposure. No damage."
+   }
+  ]
+ },
+ "/datum/reagent/space_cleaner/sterilizine": {
+  "status": [
+   {
+    "name": "Clean",
+    "cls": "buff",
+    "tip": "Contact: washes the target and the floor tile (blood, grime, decals, chemical residue). The floor needs 1u or more per exposure. No damage."
+   }
+  ]
+ },
+ "/datum/reagent/phlogiston": {
+  "status": [
+   {
+    "name": "Ignite",
+    "cls": "debuff",
+    "tip": "Touching it sets the target on fire. EVERY exposure adds +1 fire stack, sets them alight and deals 0.3 burn x their fire stacks (stacks cap at 20). Fire armour scales the burn damage; hardsuits do not stop the contact."
+   }
+  ]
+ },
+ "/datum/reagent/napalm": {
+  "status": [
+   {
+    "name": "Fuel",
+    "cls": "debuff",
+    "tip": "Contact adds fire stacks equal to units / 4 per exposure (max 20): the target burns much longer once lit. Does not ignite by itself."
+   }
+  ]
+ },
+ "/datum/reagent/consumable/ethanol": {
+  "status": [
+   {
+    "name": "Flammable",
+    "cls": "debuff",
+    "tip": "Contact adds fire stacks equal to units / 15 per exposure."
+   }
+  ]
+ },
+ "/datum/reagent/firefighting_foam": {
+  "status": [
+   {
+    "name": "Extinguish",
+    "cls": "buff",
+    "tip": "Contact puts out fire on the target and the tile and removes fire stacks."
+   }
+  ]
+ },
+ "/datum/reagent/water": {
+  "status": [
+   {
+    "name": "Wet",
+    "cls": "buff",
+    "tip": "Contact puts out fire and adds wet stacks; a floor with 5u or more goes wet (slippery)."
+   }
+  ]
+ },
+ "/datum/reagent/hydrogen_peroxide": {
+  "status": [
+   {
+    "name": "Scald",
+    "cls": "debuff",
+    "tip": "Contact burn: units x 0.5 / 3 per exposure (max 25). A floor with 5u or more goes wet."
+   }
+  ]
+ },
+ "/datum/reagent/drying_agent": {
+  "status": [
+   {
+    "name": "Dry",
+    "cls": "buff",
+    "tip": "Contact dries wet tiles and removes wetness."
+   }
+  ]
+ },
+ "/datum/reagent/toxin/mutagen": {
+  "status": [
+   {
+    "name": "Mutation",
+    "cls": "debuff",
+    "tip": "Foam: each exposure has a (units)% chance, max 33%, of a random mutation."
+   }
+  ]
+ },
+ "/datum/reagent/toxin/acid": {
+  "status": [
+   {
+    "name": "Acid",
+    "cls": "debuff",
+    "tip": "Contact melts clothing first; on bare body zones it deals brute (acid power / 2) and burn damage per exposure."
+   }
+  ]
+ },
+ "/datum/reagent/toxin/acid/fluacid": {
+  "status": [
+   {
+    "name": "Acid",
+    "cls": "debuff",
+    "tip": "Contact melts clothing first; on bare body zones it deals brute and burn damage per exposure."
+   }
+  ]
+ },
+ "/datum/reagent/medicine/epinephrine": {
+  "buffs": [
+   {
+    "name": "Crit stabiliser",
+    "cls": "buff",
+    "tip": "Only while the target is in crit: heals 0.5 of every damage type per tick, so a person in crit is held up. Also restores breath and cuts stun time, any time."
+   }
+  ]
+ },
+ "/datum/reagent/medicine/atropine": {
+  "buffs": [
+   {
+    "name": "Crit rescue",
+    "cls": "buff",
+    "tip": "Only while in crit: heals 2 brute, 2 burn, 2 toxin and 5 oxygen damage per tick (strong). Slight toxin damage if overdosed."
+   }
+  ]
+ },
+ "/datum/reagent/medicine/c2/penthrite": {
+  "buffs": [
+   {
+    "name": "Crit rescue (heart)",
+    "cls": "buff",
+    "tip": "Only while in crit: heals 2 brute, 2 burn, 2 toxin and 6 oxygen damage per tick. Overdose damages the heart badly (heart attack)."
+   }
+  ],
+  "od_severity": 10.0,
+  "od_note": "Heart takes 10 organ damage per tick: heart attack in seconds."
+ },
+ "/datum/reagent/medicine/pen_acid": {
+  "buffs": [
+   {
+    "name": "Purge toxins",
+    "cls": "buff",
+    "tip": "Removes other chemicals from the blood while it is active (the \"Purge\" effect)."
+   }
+  ]
+ },
+ "/datum/reagent/consumable/ethanol/thirteenloko": {
+  "od_severity": 3.0,
+  "od_note": "Stuns and knocks out in bursts; short bursts, no direct damage."
+ },
+ "/datum/reagent/drug/kronkaine/gore": {
+  "od_severity": 10.0,
+  "od_note": "Can gib the target: lethal."
+ },
+ "/datum/reagent/drug/cannabis": {
+  "od_severity": 0.0,
+  "od_note": "No real overdose in the code."
+ },
+ "/datum/reagent/drug/maint/tar": {
+  "od_severity": 6.0,
+  "od_note": "5 toxin per tick plus liver damage."
+ },
+ "/datum/reagent/toxin/histamine": {
+  "od_severity": 6.0,
+  "od_note": "2 brute, 2 oxygen and 2 toxin per tick."
+ },
+ "/datum/reagent/medicine/omnizine": {
+  "od_severity": 6.0,
+  "od_note": "1.5 of each damage type per tick."
+ }
+}

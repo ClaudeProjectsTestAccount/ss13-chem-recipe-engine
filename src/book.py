@@ -15,7 +15,7 @@ import os, sys, json, hashlib, re
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-import chemlib, planner, search
+import chemlib, planner, search, statspanel
 
 BOOK_PATH = os.path.join(ROOT, 'data', 'recipe_book.json')
 PAGE_PATH = os.path.join(ROOT, 'docs', 'index.html')
@@ -103,8 +103,10 @@ def validate_spec(e):
 # ----------------------------------------------------------------------------------------------- engine results per recipe
 def _engine_hash():
     h = hashlib.sha1()
-    for f in ('chemlib.py', 'planner.py', 'search.py', 'chemcli.py', 'book.py', 'tidy.py', 'page_template.html', 'chemdata.json'):
-        with open(os.path.join(HERE, f), 'rb') as fh: h.update(fh.read())
+    for f in ('chemlib.py', 'planner.py', 'search.py', 'chemcli.py', 'book.py', 'tidy.py', 'statspanel.py', 'chemstats.py', 'exposure.py', 'effects.py', 'gear.py', 'page_template.html', 'chemdata.json', '../data/chem_stats.json', '../data/gear_protection.json', '../data/chem_curated.json'):
+        p = os.path.join(HERE, f)
+        if os.path.exists(p):
+            with open(p, 'rb') as fh: h.update(fh.read())
     return h.hexdigest()
 
 def needs_of(e, gear):
@@ -130,7 +132,10 @@ def result_lines(db, rig, payload):
         l = 'Foam over up to %d tiles, each tile holds %s.' % (x['tiles'], held)
         if payload and len(foams) == 1:
             m = search.foam_metrics(rig, R(payload))
-            if m: l += ' Every %.1fs tick exposes the floor to %.1fu of %s per tile (%d ticks over its 8s life).' % (search.FOAM_DT, m['per_call'], db.name(R(payload)), m['calls'])
+            if m:
+                l += ' Every %.1fs tick exposes the floor to %.1fu of %s per tile (%d ticks over its 8s life).' % (search.FOAM_DT, m['per_call'], db.name(R(payload)), m['calls'])
+                if round(m['per_call'], 1) < 0.5: l += ' WARNING: under 0.5u per tick, so the skin absorbs NONE of it (foam only lets through exposures of 0.5u or more).'
+                else: l += ' Skin only absorbs an exposure of 0.5u or more, so armour (bio protection) that cuts it below that blocks it completely.'
         lines.append(l)
     for x in rig.sim.effects:
         if x['kind'] == 'smoke':
@@ -179,7 +184,8 @@ def simulate(db, e):
         if not uses_syringe(ops): st['s'] = None
     return {'steps': steps, 'results': result_lines(db, rig, e.get('payload')),
             'order': {'same': v['perm_same'], 'total': v['perm_total'], 'bad': v['bad_orders'][:2], 'reverse_ok': v['reverse_index_order_same'], 'clicks_ok': v['clicks_order_same'], 'temp_ok': v.get('temp_ok', True)},
-            'summary': summ, 'needs': needs_of(e, gear), 'warnings': rig.sim.warnings, 'syringes': syringes_of(e, db, chemcli.signature(rig))}
+            'summary': summ, 'needs': needs_of(e, gear), 'warnings': rig.sim.warnings, 'syringes': syringes_of(e, db, chemcli.signature(rig)),
+            'stats': statspanel.build(db, e, rig)}
 
 def dose_line(db, p):
     """what the reagent code says about dosing: overdose threshold and how long 1u lasts in the blood"""
@@ -210,10 +216,10 @@ def simulate_chem(db, e, gear, ops, rig):
     for st in steps: st['s'] = None
     return {'steps': steps, 'results': res,
             'order': {'same': v['perm_same'], 'total': v['perm_total'], 'bad': v['bad_orders'][:2], 'reverse_ok': v['reverse_index_order_same'], 'clicks_ok': v['clicks_order_same'], 'temp_ok': v.get('temp_ok', True)},
-            'summary': summ, 'needs': needs_of(e, gear), 'warnings': rig.sim.warnings, 'syringes': []}
+            'summary': summ, 'needs': needs_of(e, gear), 'warnings': rig.sim.warnings, 'syringes': [], 'stats': statspanel.build(db, e, rig)}
 
 def computed(db, e, cache=None):
-    key = hashlib.sha1((json.dumps([e['ops'], e['beaker'], e.get('syringe'), e.get('payload')]) + _engine_hash()).encode()).hexdigest()
+    key = hashlib.sha1((json.dumps([e['ops'], e['beaker'], e.get('syringe'), e.get('payload'), e.get('mix')]) + _engine_hash()).encode()).hexdigest()
     if cache is not None and key in cache: return cache[key]
     out = simulate(db, e)
     if cache is not None: cache[key] = out

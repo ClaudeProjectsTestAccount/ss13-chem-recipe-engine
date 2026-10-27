@@ -433,6 +433,32 @@ def _nodes(t):
     for c in t.children.values():
         if c is not None: yield from _nodes(c)
 
+def stats_cmd(args):
+    import statspanel, chemstats
+    db = DB()
+    if args.cmd == 'stats':
+        p = db.find_reagent(args.name)
+        if p is None: print('unknown chemical'); return 1
+        print(statspanel.mix_text(statspanel.mix_block(db, {p: 10.0}, 'One chemical, shown for a 10u dose')))
+        pr = chemstats.profile(p)
+        if pr:
+            print('  burns off at %g u per 2 s tick; 1u lasts %g ticks (%g s)' % (pr['tick_units'], round(pr['ticks_per_unit'], 2), round(pr['ticks_per_unit'] * 2, 1)))
+            if pr['od']: print('  overdose at %gu in the blood: per tick %s%s' % (pr['od'], statspanel._net(pr['od_tick']['always']), '; organs ' + ', '.join('%s %s' % (k, statspanel._sg(v)) for k, v in pr['od_organ'].items()) if pr['od_organ'] else ''))
+        return 0
+    if args.recipe:
+        import book
+        e = [r for r in book.load_book() if r['id'] == args.recipe]
+        if not e: print('no such recipe'); return 1
+        st = book.computed(db, e[0]).get('stats')
+        if not st: print('this recipe has no effects block'); return 1
+        if st.get('mix'): print(statspanel.mix_text(st['mix']))
+        if st.get('exp'): print(statspanel.exp_text(st['exp']))
+        return 0
+    try: mix = statspanel.parse_mix(db, args.mix)
+    except ValueError as ex: print('error:', ex); return 1
+    print(statspanel.mix_text(statspanel.mix_block(db, mix, 'Mix')))
+    return 0
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest='cmd')
@@ -460,7 +486,11 @@ def main(argv=None):
     a.add_argument('--beaker', default='50,100', help='comma list of beaker volumes: 50, 100, 300'); a.add_argument('--publish', action='store_true')
     a.add_argument('--min-made', type=float, default=10.0, help='skip a plan that makes less than this many units')
     a = sub.add_parser('book', help='recipe book: rebuild the page, list, rm'); a.add_argument('action', choices=['rebuild', 'list', 'rm']); a.add_argument('id', nargs='?')
+    a = sub.add_parser('mix', help='effects of a chemical mix: "libital 30, mannitol 15"; or --recipe ID for a recipe from the book')
+    a.add_argument('mix', nargs='?', default=''); a.add_argument('--recipe', default='')
+    a = sub.add_parser('stats', help='what one chemical does (per tick, overdose, status effects)'); a.add_argument('name')
     args = ap.parse_args(argv)
+    if args.cmd in ('mix', 'stats'): return stats_cmd(args)
     if args.cmd in ('publish', 'book'): return book_cmd(args)
     if args.cmd in ('chems', 'make'): return chem_cmd(args)
     db = DB()
