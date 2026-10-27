@@ -89,6 +89,14 @@ def click_plan(units):
         best[u] = cand
     return best.get(units)
 
+def click_text(clicks):
+    """'2 clicks at 10u, then 1 click at 20u': the buttons in the order they are pressed, consecutive equal ones counted"""
+    runs = []
+    for a in clicks:
+        if runs and runs[-1][0] == a: runs[-1][1] += 1
+        else: runs.append([a, 1])
+    return ', then '.join('%d click%s at %du' % (n, 's' if n > 1 else '', a) for a, n in runs)
+
 class Rig:
     """a borg's working set: internal beaker, onboard syringe, a dispenser, optional heater"""
     def __init__(self, db, tier=1, reverse=False, gear=None):
@@ -106,27 +114,35 @@ class Rig:
         self.steps = []   # (text, state-after, notes)
         self.peak = 0.0   # most the payload beaker ever held at the moment something was about to react (for the 'beaker used' figure)
 
-    def _snap(self, text, notes=None):
+    def _snap(self, text, notes=None, parts=None, op=None):
+        """parts = the step as styled tokens [(kind, text)], kind: t plain, u units, c chemical, x spill/empty, n small note, trig trigger marker"""
         nlog = self.sim.log[:]; self.sim.log.clear()
         self.steps.append({'text': text, 'beaker': self.beaker.describe(), 'syringe': self.syringe.describe(),
-                           'beaker_temp': round(self.beaker.temp), 'log': nlog, 'notes': notes or []})
+                           'beaker_temp': round(self.beaker.temp), 'log': nlog, 'notes': notes or [],
+                           'parts': parts or [('t', text)], 'op': op or (), 'nwarn': len(self.sim.warnings)})
 
-    def dispense(self, reagent, units):
+    def dispense(self, reagent, units, clicks=None):
+        """clicks: the exact dispenser buttons in the order they are pressed (they must add up to units); default = the fewest clicks, biggest first"""
         p = self.db.find_reagent(reagent)
         if p not in self.avail:
             raise ValueError('%s is not dispensable at this dispenser tier' % self.db.name(p))
         if units % 5: raise ValueError('dispenser can only deliver multiples of 5u')
         tgt = self.active
-        clicks = sorted(click_plan(units), reverse=CLICKS_BIGGEST_FIRST)
+        if clicks is None: clicks = sorted(click_plan(units), reverse=CLICKS_BIGGEST_FIRST)
+        else:
+            clicks = [int(a) for a in clicks]
+            if sum(clicks) != units or any(a not in DISP_AMOUNTS for a in clicks): raise ValueError('clicks %s do not make %du from the buttons %s' % (clicks, units, DISP_AMOUNTS))
+            if not CLICKS_BIGGEST_FIRST: clicks = clicks[::-1]       # chemcli.verify_orders: the opposite order inside the step must give the same result
         for a in clicks:
             to_disp = max(0, min(a, tgt.max - tgt.total))
             if to_disp < a: self.sim.warnings.append('%s full: dispenser click of %du was clamped to %du' % (tgt.name, a, to_disp))
             if tgt is self.beaker: self.peak = max(self.peak, tgt.total + to_disp)
             tgt.add_reagent(p, to_disp, chemlib.DEFAULT_TEMP)
-        ct = {}
-        for a in clicks: ct[a] = ct.get(a, 0) + 1
-        how = ' + '.join('%d click%s at %du' % (n, 's' if n > 1 else '', a) for a, n in sorted(ct.items(), reverse=True))
-        self._snap('Dispenser: %du %s%s  (%s)' % (units, self.db.name(p), (' into the ' + tgt.name) if self.gear.two else '', how))
+        how = click_text(clicks)
+        into = (' into the ' + tgt.name) if self.gear.two else ''
+        self._snap('Dispenser: %du %s%s  (%s)' % (units, self.db.name(p), into, how),
+                   parts=[('t', 'Dispenser: '), ('u', '%du' % units), ('c', self.db.name(p)), ('t', into), ('n', '(%s)' % how)],
+                   op=('dispense', self.db.name(p), units, tuple(clicks), how, bool(self.gear.two)))
 
     def add(self, reagent, units, source=None):
         """an ingredient that is NOT from the chem dispenser (a donor bottle, a syringe of someone's blood...).  Any amount."""
@@ -136,7 +152,8 @@ class Rig:
         if tgt is self.beaker: self.peak = max(self.peak, tgt.total + to_add)
         if to_add < units: self.sim.warnings.append('%s full: outside supply of %gu was clamped to %gu' % (tgt.name, units, to_add))
         tgt.add_reagent(p, to_add, chemlib.DEFAULT_TEMP)
-        self._snap('Outside supply: put %gu %s into the %s%s' % (units, self.db.name(p), tgt.name, (' (' + source + ')') if source else ''))
+        self._snap('Outside supply: put %gu %s into the %s%s' % (units, self.db.name(p), tgt.name, (' (' + source + ')') if source else ''),
+                   parts=[('t', 'Outside supply: put '), ('u', '%gu' % units), ('c', self.db.name(p)), ('t', ' into the %s' % tgt.name), ('n', ('(' + source + ')') if source else '')])
 
     def draw(self, units=None):
         if self.gear.two: raise ValueError('two-beaker mode has no syringe; use swap/inject (pour)')
@@ -144,12 +161,14 @@ class Rig:
         if units not in self.gear.samts:
             raise ValueError('syringe transfer amounts are %s, not %s' % (self.gear.samts, units))
         got = self.beaker.trans_to(self.syringe, units)
-        self._snap('Syringe: draw %du from the beaker (got %.2fu)' % (units, got or 0))
+        self._snap('Syringe: draw %du from the beaker (got %.2fu)' % (units, got or 0),
+                   parts=[('t', 'Syringe: draw '), ('u', '%du' % units), ('t', ' from the beaker'), ('n', '(got %.2fu)' % (got or 0))])
 
     def spill(self):
         left = self.beaker.describe()
         self.beaker.clear(); self.beaker.temp = 150.0
-        self._snap('Beaker: spill/empty the rest', notes=['discarded: ' + left])
+        self._snap('Beaker: spill/empty the rest', notes=['discarded: ' + left],
+                   parts=[('t', 'Beaker: '), ('x', 'SPILL / EMPTY'), ('t', ' the rest')])
 
     def heat(self, kelvin, coeff=0.05):
         """chem_heater.dm process(): each tick adjust_thermal_energy((target-T)*coeff*dt*SH*volume) then handle_reactions().
@@ -169,9 +188,12 @@ class Rig:
             if rx.required_temp <= kelvin + 1e-9 and b.temp < rx.required_temp:
                 self.sim.warnings.append('%s needs %dK but the heater only approaches %dK (never reaches it): set the heater at least 10K higher' % (rx.short, rx.required_temp, kelvin))
         msg = 'Heater: set target %dK, put the beaker in' % kelvin
-        if fired: msg += ' - the reaction fires after ~%ds (beaker ~%dK); you can take it out then' % fired
+        parts = [('t', 'Heater: set target '), ('u', '%dK' % kelvin), ('t', ', put the beaker in')]
+        if fired:
+            tail = ' - the reaction fires after ~%ds (beaker ~%dK); you can take it out then' % fired
+            msg += tail; parts.append(('t', tail))
         msg += ' [heater speed %.2f]' % coeff
-        self._snap(msg)
+        self._snap(msg, parts=parts)
 
     def swap(self):
         """two-beaker mode: switch which beaker sits in the dispenser (right-click the machine with the apparatus to eject/stash)"""
@@ -192,7 +214,8 @@ class Rig:
             n = self.syringe.trans_to(self.beaker, amt)
             if self.syringe.total > 0.05:
                 self.sim.warnings.append('payload beaker overflowed: %.1fu of the trigger stayed behind' % self.syringe.total)
-            self._snap('Beaker: set pour amount %du and pour the whole trigger beaker into the payload beaker  <-- TRIGGER' % amt)
+            self._snap('Beaker: set pour amount %du and pour the whole trigger beaker into the payload beaker  <-- TRIGGER' % amt,
+                       parts=[('t', 'Beaker: set pour amount '), ('u', '%du' % amt), ('t', ' and pour the whole trigger beaker into the payload beaker'), ('trig', '')])
         else:
             if not any(a >= total - 1e-9 for a in g.samts):
                 raise ValueError('syringe transfer amounts %s cannot inject %.0fu in one go' % (g.samts, total))
@@ -201,14 +224,15 @@ class Rig:
             n = self.syringe.trans_to(self.beaker, amt)
             if self.syringe.total > 0.05:
                 self.sim.warnings.append('payload beaker overflowed: %.1fu stayed in the syringe' % self.syringe.total)
-            self._snap('Syringe: set transfer %du, inject all %.0fu into the beaker  <-- TRIGGER' % (amt, n or 0))
+            self._snap('Syringe: set transfer %du, inject all %.0fu into the beaker  <-- TRIGGER' % (amt, n or 0),
+                       parts=[('t', 'Syringe: set transfer '), ('u', '%du' % amt), ('t', ', inject all '), ('u', '%.0fu' % (n or 0)), ('t', ' into the beaker'), ('trig', '')])
 
 def run(db, proc, tier=1, reverse=False, gear=None):
     """proc: list of ('dispense', reagent, units) | ('draw',[units]) | ('spill',) | ('swap',) | ('heat', K) | ('inject',)"""
     rig = Rig(db, tier, reverse, gear)
     for st in proc:
         op = st[0]
-        if op == 'dispense': rig.dispense(st[1], st[2])
+        if op == 'dispense': rig.dispense(st[1], st[2], st[3] if len(st) > 3 else None)
         elif op == 'draw': rig.draw(st[1] if len(st) > 1 else None)
         elif op == 'swap': rig.swap()
         elif op == 'spill': rig.spill()

@@ -103,7 +103,7 @@ def validate_spec(e):
 # ----------------------------------------------------------------------------------------------- engine results per recipe
 def _engine_hash():
     h = hashlib.sha1()
-    for f in ('chemlib.py', 'planner.py', 'search.py', 'chemcli.py', 'book.py', 'chemdata.json'):
+    for f in ('chemlib.py', 'planner.py', 'search.py', 'chemcli.py', 'book.py', 'tidy.py', 'page_template.html', 'chemdata.json'):
         with open(os.path.join(HERE, f), 'rb') as fh: h.update(fh.read())
     return h.hexdigest()
 
@@ -150,7 +150,8 @@ def result_lines(db, rig, payload):
 def simulate(db, e):
     """run one recipe through the engine -> dict of everything the page shows besides the hand-written text"""
     import chemcli
-    gear = gear_of(e); ops = [op_tuple(o) for o in e['ops']]
+    import tidy
+    gear = gear_of(e); ops = tidy.tidy(db, [op_tuple(o) for o in e['ops']], gear)      # combine/reorder/click rules (tidy.py); same result as the plain ops
     rig = chemcli._run(db, ops, 1, False, gear)
     if group_of(e) == 'chem': return simulate_chem(db, e, gear, ops, rig)
     haz = [x for x in rig.sim.effects if x['kind'] == 'HAZARD']
@@ -173,7 +174,9 @@ def simulate(db, e):
         if x['kind'] == 'vortex': summ['range'] = round(x['range'], 1)
         if x['kind'] == 'mobspawn': summ['mobs'] = x['max']
     summ['fill'] = round(100.0 * rig.peak / cap) if e['beaker'] else None
-    steps = [{'t': st['text'], 'b': st['beaker'], 's': st['syringe'] if uses_syringe(ops) else None} for st in rig.steps]
+    steps = tidy.display_steps(rig, gear)
+    for st in steps:
+        if not uses_syringe(ops): st['s'] = None
     return {'steps': steps, 'results': result_lines(db, rig, e.get('payload')),
             'order': {'same': v['perm_same'], 'total': v['perm_total'], 'bad': v['bad_orders'][:2], 'reverse_ok': v['reverse_index_order_same'], 'clicks_ok': v['clicks_order_same']},
             'summary': summ, 'needs': needs_of(e, gear), 'warnings': rig.sim.warnings, 'syringes': syringes_of(e, db, chemcli.signature(rig))}
@@ -188,14 +191,14 @@ def dose_line(db, p):
     return ', '.join(bits) + '.'
 
 def simulate_chem(db, e, gear, ops, rig):
-    import chemcli
+    import chemcli, tidy
     bad = [x for x in rig.sim.effects if x['kind'] in ('HAZARD', 'UNMODELED')]
     if bad: raise ValueError('hazard or effect the engine cannot model: %s' % bad)
     if rig.sim.effects: raise ValueError('a plain chemical recipe must not fire a foam, smoke or other effect (%s): file it as a borg recipe' % rig.sim.effects[0]['kind'])
     p = db.find_reagent(e['payload']); amt = rig.beaker.amount(p)
     if amt < 1: raise ValueError('the recipe leaves no %s in the beaker' % e['payload'])
     v = chemcli.verify_orders(db, ops, 1, gear)
-    left = [(db.name(k), round(x[0], 1)) for k, x in rig.beaker.r.items() if k != p]
+    left = sorted([(db.name(k), round(x[0], 1)) for k, x in rig.beaker.r.items() if k != p], key=lambda t: (-t[1], t[0]))
     raw = sum(o[2] for o in ops if o[0] == 'dispense')
     summ = {'kind': 'chem', 'product': db.name(p), 'made': round(amt, 1), 'raw': raw, 'fill': round(100.0 * rig.peak / gear.beaker), 'end_fill': round(100.0 * rig.beaker.total / gear.beaker),
             'left': ['%gu %s' % (a, n) for n, a in left]}
@@ -203,7 +206,8 @@ def simulate_chem(db, e, gear, ops, rig):
     if left: res.append('Left in the beaker with it: %s. Pour them out or leave them: they are not the product.' % ', '.join('%gu %s' % (a, n) for n, a in left))
     d = dose_line(db, p)
     if d: res.append('Dosing (reagent code): %s' % d)
-    steps = [{'t': st['text'], 'b': st['beaker'], 's': None} for st in rig.steps]
+    steps = tidy.display_steps(rig, gear)
+    for st in steps: st['s'] = None
     return {'steps': steps, 'results': res,
             'order': {'same': v['perm_same'], 'total': v['perm_total'], 'bad': v['bad_orders'][:2], 'reverse_ok': v['reverse_index_order_same'], 'clicks_ok': v['clicks_order_same']},
             'summary': summ, 'needs': needs_of(e, gear), 'warnings': rig.sim.warnings, 'syringes': []}

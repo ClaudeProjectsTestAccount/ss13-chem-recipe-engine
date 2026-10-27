@@ -209,7 +209,7 @@ def run_ops(db, ops, tier=1, reverse=False):
 def _run(db, ops, tier, reverse, gear=None):
     rig = planner.Rig(db, tier, reverse, gear)
     for st in ops:
-        if st[0] == 'dispense': rig.dispense(st[1], st[2])
+        if st[0] == 'dispense': rig.dispense(st[1], st[2], st[3] if len(st) > 3 else None)
         elif st[0] == 'swap': rig.swap()
         elif st[0] == 'draw': rig.draw(st[1] if len(st) > 1 else None)
         elif st[0] == 'spill': rig.spill()

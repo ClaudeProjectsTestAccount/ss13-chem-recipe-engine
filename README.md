@@ -38,6 +38,14 @@ python3 src/chemcli.py make --beaker 50,100 --publish             # no names = e
 
 `src/chemplan.py` finds the cheapest instant-reaction route down to dispensable raws, tries every reaction size, rounds raws up to the dispenser's 5u clicks, simulates each candidate, nudges each raw by 5u, drops heater steps the simulation shows are unnecessary, and keeps the plan that yields the most product without overflow and whose result does not depend on click order. Labels (type, one-line tag, harm, caution) live in `data/chem_meta.json`; the description, overdose threshold and metabolism rate come from the game source. Chemicals that need a plasma catalyst, a cold recipe or another department are not buildable and say so.
 
+### Step tidying (automatic)
+
+`src/tidy.py` shortens every recipe's step list when the page is built, and checks with the engine that the result is unchanged (same beaker, effects, warnings, temperature, and the same result with each step's clicks in the opposite order):
+- neighbouring dispenser steps that add the same number of units are shown as **one step** with a numbered list (a run of neighbouring dispenser steps may be re-ordered by quantity to get more of those, when the engine agrees);
+- each step's units are split into clicks (at most 3 per step) so the whole recipe changes dispenser buttons as rarely as possible, e.g. 20u shown as two 10u clicks when the next chemical is 10u (about a third of the button changes of the plain plan on the current book);
+- a dispenser step whose click is clamped to the free space keeps its exact clicks.
+Units, chemical names and SPILL/EMPTY commands are bold and boxed on the page. Nothing to run: `book rebuild` applies it, and recipes in `recipe_book.json` stay as plain `dispense <chem> <units>` ops.
+
 ## Ask the planner for a new recipe
 
 ```
