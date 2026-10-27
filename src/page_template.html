@@ -137,6 +137,14 @@ details.group[open] .hero-btn .c{display:none}details.group:not([open]) .hero-bt
 .planned .pl{border:2px dashed var(--line);border-radius:14px;padding:.75rem .95rem;margin:.6rem 0;color:var(--mute)}
 .planned .pl b{color:var(--ink)}
 @media (max-width:560px){ol.steps li.done{padding-right:6.6rem}ol.steps li.done::after{font-size:.8rem;padding:0 .3rem;letter-spacing:.08em}button.reset{font-size:.98rem}}
+/* ===== UI MODULE: tooltips. Every tooltip on this page is drawn by this block and by tip() in the script: never use the title attribute. ===== */
+:root{--tip-bg:#16213a;--tip-ink:#fff6dd;--tip-bev:9px;--tip-bd:3px;--tip-edge:linear-gradient(135deg,#ffe9a8,#e0a526 45%,#8a5d0c)}
+#tip{position:fixed;left:0;top:0;z-index:1000;max-width:min(27rem,calc(100vw - 16px));pointer-events:none;visibility:hidden;opacity:0;transform:translateY(5px);transition:opacity .12s,transform .12s,visibility .12s;filter:drop-shadow(0 5px 7px rgba(0,0,0,.4))}
+#tip.on{visibility:visible;opacity:1;transform:none}
+#tip .tip-e{padding:var(--tip-bd);background:var(--tip-edge);clip-path:polygon(var(--tip-bev) 0,calc(100% - var(--tip-bev)) 0,100% var(--tip-bev),100% calc(100% - var(--tip-bev)),calc(100% - var(--tip-bev)) 100%,var(--tip-bev) 100%,0 calc(100% - var(--tip-bev)),0 var(--tip-bev))}
+#tip .tip-t{--c:calc(var(--tip-bev) - .586 * var(--tip-bd));padding:.55rem .85rem;background:var(--tip-bg);color:var(--tip-ink);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);clip-path:polygon(var(--c) 0,calc(100% - var(--c)) 0,100% var(--c),100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,var(--c) 100%,0 calc(100% - var(--c)),0 var(--c));
+  font:italic 650 1.15rem/1.35 Georgia,"Iowan Old Style","Palatino Linotype",serif;letter-spacing:.01em;overflow-wrap:anywhere}
+@media (prefers-reduced-motion:reduce){#tip{transition:none;transform:none}}
 .hidden{display:none!important}
 .empty{color:var(--mute);padding:.6rem .95rem}
 footer{margin-top:2rem;color:var(--mute);font-size:.68rem;line-height:1.35}
@@ -154,7 +162,7 @@ a{color:var(--accent)}
 
 <details class="group" id="g-medborg"><summary class="hero s1">
   <div class="hero-top">
-    <figure class="hero-fig"><img class="hero-img" src="/*__HERO_IMG__*/" alt="Watercolor of Birdbrain, a white medical cyborg on a yellow-green repulsor, giving a clown a hypospray in a teal medbay cutaway. Ian the corgi wears a hat beside them." width="640" height="600" title="Everyone Gets a Lollipop, medbay cutaway (v2). Birdbrain, Chief Boo-Boo Officer."><figcaption>&ldquo;Everyone Gets a Lollipop&rdquo;<br>Birdbrain, Chief Boo-Boo Officer</figcaption></figure>
+    <figure class="hero-fig"><img class="hero-img" src="/*__HERO_IMG__*/" alt="Watercolor of Birdbrain, a white medical cyborg on a yellow-green repulsor, giving a clown a hypospray in a teal medbay cutaway. Ian the corgi wears a hat beside them." width="640" height="600" data-tip="Everyone Gets a Lollipop, medbay cutaway (v2). Birdbrain, Chief Boo-Boo Officer."><figcaption>&ldquo;Everyone Gets a Lollipop&rdquo;<br>Birdbrain, Chief Boo-Boo Officer</figcaption></figure>
     <h2 class="hero-title">Medical Cyborg Chem Nades</h2>
     <span class="count-chip" id="mcount"></span>
   </div>
@@ -248,6 +256,23 @@ var CTIERS = [[50,'Regular 50u beaker','the plain beaker everyone has'],[100,'La
 var HARM = {safe:'harmless',caution:'use with care',danger:'dangerous: Law 1 applies'};
 
 function el(tag, cls, text){ var e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; }
+/* ===== UI MODULE: tooltips. tip(element, text) is the ONLY way to give anything a tooltip (empty text removes it). One delegated listener draws them; style lives in the #tip CSS block. ===== */
+var tip=(function(){
+  var box,txt,cur=null;
+  function make(){ box=el('div'); box.id='tip'; box.setAttribute('role','tooltip'); var e=el('div','tip-e'); txt=el('div','tip-t'); e.appendChild(txt); box.appendChild(e); document.body.appendChild(box); }
+  function place(x,y){ var w=box.offsetWidth,h=box.offsetHeight,t=y+24; if(t+h>innerHeight-8) t=Math.max(8,y-h-14);
+    box.style.left=Math.min(Math.max(8,x+12),Math.max(8,innerWidth-w-8))+'px'; box.style.top=t+'px'; }
+  function show(t,x,y){ if(!box) make(); if(cur!==t){ cur=t; txt.textContent=t; } box.classList.add('on'); place(x,y); }
+  function hide(){ cur=null; if(box) box.classList.remove('on'); }
+  function find(n){ return n&&n.closest?n.closest('[data-tip]'):null; }
+  document.addEventListener('pointerover',function(e){ var t=find(e.target); if(t&&t.dataset.tip) show(t.dataset.tip,e.clientX,e.clientY); else hide(); });
+  document.addEventListener('pointermove',function(e){ if(cur!==null) place(e.clientX,e.clientY); });
+  document.addEventListener('pointerdown',function(e){ if(e.pointerType==='touch') hide(); });
+  document.addEventListener('focusin',function(e){ var t=find(e.target); if(t&&t.dataset.tip){ var r=t.getBoundingClientRect(); show(t.dataset.tip,r.left,r.bottom-20); } });
+  document.addEventListener('focusout',hide); document.addEventListener('scroll',hide,true);
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') hide(); });
+  return function(e,text){ if(text) e.dataset.tip=text; else delete e.dataset.tip; return e; };
+})();
 function kv(label, text, cls){ var d=el('div','kv'+(cls?' '+cls:'')); d.appendChild(el('b',null,label+' ')); d.appendChild(document.createTextNode(text)); return d; }
 function chip(text, cls){ return el('span','chip'+(cls?' '+cls:''), text); }
 
@@ -283,7 +308,7 @@ function summaryChips(r){
   } else if(s.kind==='vortex') c.appendChild(chip('range '+s.range+' tiles'));
   else if(s.kind==='mobspawn') c.appendChild(chip('1 to '+s.mobs+' mobs'));
   if(r.stats&&r.stats.broken) c.appendChild(chip('BROKEN: wasted chems','danger'));
-  var fs=r.stats&&r.stats.exp&&r.stats.exp.floor_safety; if(fs&&(!fs.safe||r.type==='hell')){ var fc=chip(fs.safe?'floor-safe':'DESTROYS FLOOR', fs.safe?'safe':'danger'); fc.title=fs.safe?'Nothing in the mix melts or burns away the floor tile (no thermite coat, chlorine trifluoride or acid of power 200+). Fire only scorches, acids only mark the tile and eat items lying on it.':fs.reasons.join('; '); c.appendChild(fc); }
+  var fs=r.stats&&r.stats.exp&&r.stats.exp.floor_safety; if(fs&&(!fs.safe||r.type==='hell')){ var fc=chip(fs.safe?'floor-safe':'DESTROYS FLOOR', fs.safe?'safe':'danger'); tip(fc,fs.safe?'Nothing in the mix melts or burns away the floor tile (no thermite coat, chlorine trifluoride or acid of power 200+). Fire only scorches, acids only mark the tile and eat items lying on it.':fs.reasons.join('; ')); c.appendChild(fc); }
   if(r.stats&&r.stats.flags) r.stats.flags.forEach(function(f){ if(f.id==='lube-long') c.appendChild(chip((f.ok?'long lube (intended)':'LUBE TOO LONG')+': '+r.stats.exp.slick.total+' s', f.ok?'caution':'danger')); });
   if(s.fill!=null) c.appendChild(chip('beaker '+s.fill+'% used'));
   c.appendChild(chip(HARM[r.harm]||r.harm, r.harm));
@@ -297,14 +322,14 @@ function dmgCell(v){ var td=el('td','n'); if(!v){ td.textContent='–'; return t
 function tbl(head, rows){ var w=el('div','tw'), t=el('table'), h=el('tr'); head.forEach(function(x){ var th=el('th',null,x); h.appendChild(th); }); t.appendChild(h); rows.forEach(function(r){ t.appendChild(r); }); w.appendChild(t); return w; }
 function tr(cells){ var r=el('tr'); cells.forEach(function(c){ if(typeof c==='string') c=el('td',null,c); r.appendChild(c); }); return r; }
 function nc(s){ return el('td','n',s); }
-function chipRow(list){ var d=el('div','bf'); list.forEach(function(c){ var s=el('span',c.c||c.cls||'buff',c.l||c.n); s.title=(c.tip||'')+(c.by&&c.by.length?'  [from: '+c.by.join(', ')+']':''); d.appendChild(s); }); return d; }
+function chipRow(list){ var d=el('div','bf'); list.forEach(function(c){ var s=el('span',c.c||c.cls||'buff',c.l||c.n); tip(s,(c.tip||'')+(c.by&&c.by.length?'  [from: '+c.by.join(', ')+']':'')); d.appendChild(s); }); return d; }
 function fxNet(o){ var s=[]; KN.forEach(function(k){ if(o[k[0]]) s.push(k[1]+' '+sgn(o[k[0]])); }); return s.join(', ')||'no damage or healing'; }
 function mixPanel(m, into){
   into.appendChild(el('h4',null,m.title+' - '+m.total+'u'));
   var rows=m.rows.map(function(r){
     var c=[el('td',null,r.n), nc(r.u), nc(r.f+'%'), nc(r.od_at!=null? r.od_at+'u (OD '+r.od+'u alone)' : (r.od? 'OD '+r.od+'u' : 'none')), nc(r.sev!=null? r.sev : '–')];
     KN.slice(0,4).forEach(function(k){ c.push(dmgCell(r.tick[k[0]])); });
-    c.push(nc(r.dur+' s')); var row=tr(c); if(r.odnote) row.title=r.odnote; return row; });
+    c.push(nc(r.dur+' s')); var row=tr(c); tip(row,r.odnote); return row; });
   var tot=[el('td',null,'<b>Whole mix, per tick</b>'.replace(/<\/?b>/g,'')), nc(m.total), nc('100%'), el('td'), el('td')];
   KN.slice(0,4).forEach(function(k){ tot.push(dmgCell(m.net[k[0]])); }); tot.push(el('td'));
   var trr=tr(tot); trr.style.fontWeight='700'; rows.push(trr);
@@ -337,7 +362,7 @@ function floorPanel(f, into){
   into.appendChild(el('div','hot','Floor effects test the amount in ONE exposure (tile contents x '+f.frac+'%), not the tile total. '+f.exposures+' exposures per tile over the life, so the whole-life column is what the tile gets in total. Hover an effect for its rules.'));
   var rows=f.rows.map(function(r){
     var td=el('td'); if(!r.effs.length) td.textContent='nothing on the floor';
-    r.effs.forEach(function(e){ var s=el('div',null,(e.fires?'✔ ':'✘ ')+e.l+(e.fires?'':' - not triggered: needs '+e.thr+'u per exposure ('+e.need_tile+'u in each tile)')+(e.extra?' ('+e.extra+')':'')); s.title=e.tip; s.style.cursor='help'; s.className=e.fires?'ok':'warn'; td.appendChild(s); });
+    r.effs.forEach(function(e){ var s=el('div',null,(e.fires?'✔ ':'✘ ')+e.l+(e.fires?'':' - not triggered: needs '+e.thr+'u per exposure ('+e.need_tile+'u in each tile)')+(e.extra?' ('+e.extra+')':'')); tip(s,e.tip); s.style.cursor='help'; s.className=e.fires?'ok':'warn'; td.appendChild(s); });
     return tr([r.n, nc(r.tile+'u'), nc(r.per+'u'), nc(r.total+'u'), td]); });
   into.appendChild(tbl(['Chemical','In tile','Per exposure','Whole life','Floor effect'], rows));
 }
@@ -366,7 +391,7 @@ function expPanel(x, into){
     if(s.fx.acid_brute||s.fx.acid_burn) fx.push('acid '+(s.fx.acid_brute||0)+' brute / '+(s.fx.acid_burn||0)+' burn'); if(s.fx.mutate) fx.push('mutation'); if(s.fx.clean) fx.push('washed'); if(s.fx.extinguish) fx.push('extinguished');
     if(s.fire_cover>0&&s.fx.fire) fx.push('(fire armour cuts burn '+s.fire_cover+'%)');
     var bl=s.blood? fxNet(s.blood.totals)+(s.blood.tags.length? '; '+s.blood.tags.map(function(t){return t.l;}).join(', ') : '')+(Object.keys(s.blood.od).length? '; OD: '+Object.keys(s.blood.od).map(function(k){return k+' after '+s.blood.od[k]+' s';}).join(', '):'') : '–';
-    var r=tr([s.name, foam? s.block+'% blocked' : (s.breathes?'yes':'NO - blocked'), ab, fx.join(', ')||'none', bl]); r.title=s.note; return r; });
+    var r=tr([s.name, foam? s.block+'% blocked' : (s.breathes?'yes':'NO - blocked'), ab, fx.join(', ')||'none', bl]); tip(r,s.note); return r; });
   into.appendChild(tbl(head, srows));
   into.appendChild(el('div','kv sub','Hover a row for notes. "In the blood (net)" is the total damage/healing over the whole time the absorbed chemicals last (not per tick).'));
 }
@@ -401,7 +426,7 @@ function recipeCard(r, tier){
   b.appendChild(kv('Needs:', r.needs.length? r.needs.join('; ') : 'nothing special'));
   var ol=el('ol','steps');
   r.steps.forEach(function(st){
-    var li=el('li'); li.tabIndex=0; li.setAttribute('role','button'); li.setAttribute('aria-pressed','false'); li.title='Click to mark this step done (click again to undo)'; steps.push(li);
+    var li=el('li'); li.tabIndex=0; li.setAttribute('role','button'); li.setAttribute('aria-pressed','false'); tip(li,'Click to mark this step done (click again to undo)'); steps.push(li);
     function flip(){ var on=li.classList.toggle('done'); li.setAttribute('aria-pressed',on?'true':'false'); refresh(); }
     li.addEventListener('click', flip);
     li.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); flip(); } });
