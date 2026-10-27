@@ -196,3 +196,32 @@ def min_note(kind, tiles, air_k):
     """the shortest slick time ANY lube can give in this size of foam / smoke (just over its 1u threshold)"""
     pl = plan(kind, tiles)
     return slick_sim(kind, tiles, {'/datum/reagent/lube': 1.0 / pl['fraction'] * 1.0000001}, air_k)['total_s']
+
+
+# ---------------------------------------------------------------- supporting chemicals and floor safety
+def support():
+    """{reagent path: dict(for=[products that need it], why=...)} from data/tile_policy.json"""
+    return {k: v for k, v in policy().get('support', {}).items() if not k.startswith('_')}
+
+def supported(tile):
+    """-> {reagent path: dict(for=[the products in this tile that need it], why)} for the chemicals in the tile that exist only to support another one"""
+    out = {}
+    for p, v in support().items():
+        need = [q for q in v['for'] if q in tile]
+        if p in tile and need: out[p] = dict(for_=need, why=v['why'])
+    return out
+
+def floor_safety(kind, tiles, tile, air_k=293.15):
+    """does the foam / smoke destroy the floor?  -> dict(safe, reasons).  Floor-destroying here means: a thermite coat big enough to melt the tile,
+    chlorine trifluoride, or an acid with power 200 or more (the game melts the tile for those).  Fire, ordinary acids and lube only mark or wet it."""
+    import chemstats as cs
+    reasons = []
+    pl = plan(kind, tiles)
+    for row in per_tile(kind, tiles, tile):
+        p = row['path']
+        for ev in evaluate(p, row['per_exposure'], pl['exposures'], pl['dt'], air_k):
+            if ev['id'] == 'thermite' and ev['fires'] and ev.get('enough'): reasons.append('thermite coat of %.0f u melts the floor' % ev['total'])
+            if ev['id'] == 'clf3' and ev['fires']: reasons.append('chlorine trifluoride burns the floor')
+        pw = (cs.stats().get(p, {}).get('vars', {}) or {}).get('acidpwr')
+        if isinstance(pw, (int, float)) and pw >= 200 and row['per_exposure'] > 0: reasons.append('acid power %g or more melts the tile' % pw)
+    return dict(safe=not reasons, reasons=reasons)

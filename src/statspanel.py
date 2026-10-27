@@ -110,8 +110,10 @@ def inert_chems(rep):
     """chemicals in the tile that do nothing to anything: no floor effect, no contact effect on a person, nothing absorbed that has an effect in the blood"""
     out = []; bare = rep['scenarios'][0]; sc = bare['sc']
     floor = {r['path']: r for r in rep['floor']['rows']}
+    sup = ta.supported({c['path']: c['tile'] for c in rep['chems']})
     for c in rep['chems']:
         p = c['path']; fr = floor[p]
+        if p in sup: continue                       # needed to make something else in the tile (stabilizing agent for phlogiston, blood seed for carpet): not wasted
         if fr['floor_active']: continue
         methods = ex.VAPOR if rep['kind'] == 'foam' else (ex.TOUCH | ex.INGEST)
         cx = ex.contact(p, methods, c['per_call'], sc)
@@ -147,7 +149,9 @@ def exposure_block(db, x, air_k=293.15):
     rep = ex.analyse(x['kind'], x['tile'], x['tiles'], air_k=air_k)
     names = {c['path']: c['name'] for c in rep['chems']}
     chems = [dict(n=c['name'], tile=r2(c['tile'], 1), per=r2(c['per_call'], 2), contact=c['contact'], pen=bool(c['pen'] & ex.VAPOR), od=cs.stats().get(c['path'], {}).get('od')) for c in rep['chems']]
-    return dict(slick=slick_block(ta.slick_report(rep['kind'], rep['tiles'], x['tile'], air_k)), floor=floor_block(rep), inert=inert_chems(rep), kind=rep['kind'], tiles=rep['tiles'], frac=r2(100 * rep['fraction'], 2), calls=rep['calls'], dt=rep['dt'], life=rep['life'], tile_total=r2(rep['tile_total'], 1),
+    sup = ta.supported(x['tile'])
+    needed = [dict(n=ex_name(p), u=r2(x['tile'][p], 1), why=v['why'], for_=[ex_name(q) for q in v['for_']]) for p, v in sup.items()]
+    return dict(slick=slick_block(ta.slick_report(rep['kind'], rep['tiles'], x['tile'], air_k)), floor=floor_block(rep), inert=inert_chems(rep), needed=needed, floor_safety=ta.floor_safety(rep['kind'], rep['tiles'], x['tile'], air_k), kind=rep['kind'], tiles=rep['tiles'], frac=r2(100 * rep['fraction'], 2), calls=rep['calls'], dt=rep['dt'], life=rep['life'], tile_total=r2(rep['tile_total'], 1),
                 chems=chems, rules=RULES[rep['kind']], scenarios=[scenario_row(s, names) for s in rep['scenarios']])
 
 def build(db, e, rig):
@@ -212,6 +216,9 @@ def exp_text(x):
             L.append('    %s: %gu per tile now, threshold %gu per tile (%gu per exposure), extra over threshold %s u per tile; adds %g s per exposure%s; alone %s s, at threshold %s s%s' % (
                 c['n'], c['u'], c['thr_tile'], c['thr'], c['extra'], c['add'], ' (capped at %g)' % c['cap'] if c['capped'] else '', c['solo'], c['at_thr'], ('; largest amount that meets the target %s u per tile' % c['max_u']) if c['max_u'] else ''))
         if sl['dry_fix']: L.append('    drying agent fix: about %g u of drying agent per tile (placed after the lube in the tile) brings it under the target' % sl['dry_fix'])
+    for i in x.get('needed') or []: L.append('  NEEDED but passive (not wasted): %s %gu per tile for %s (%s)' % (i['n'], i['u'], ', '.join(i['for_']), i['why']))
+    fs = x.get('floor_safety')
+    if fs: L.append('  FLOOR: ' + ('safe (nothing melts the tile)' if fs['safe'] else 'DESTROYED: ' + '; '.join(fs['reasons'])))
     if x['inert']: L.append('  BROKEN - wasted chemicals: ' + '; '.join('%s %gu (%s)' % (i['n'], i['u'], i['why']) for i in x['inert']))
     L.append('  Rules:'); L += ['   - ' + r for r in x['rules']]
     for s in x['scenarios']:

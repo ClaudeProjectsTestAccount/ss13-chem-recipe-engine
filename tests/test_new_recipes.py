@@ -97,8 +97,8 @@ class RecipeTable(unittest.TestCase):
     def test_headline_numbers(self):
         want = {'metal-foam-100': ('foam', 100), 'iron-foam-100': ('foam', 100), 'metal-foam-xl-300': ('foam', 200),
                 'drying-foam-100-15': ('foam', 30), 'carpet-foam-100-15': ('foam', 30), 'black-carpet-foam-100-15': ('foam', 30),
-                'carpet-foam-xl-300-60': ('foam', 120), 'libital-fog-100-15': ('smoke', 45), 'aiuri-fog-100-15': ('smoke', 45),
-                'cleaner-smoke-300-60': ('smoke', 180), 'lube-foam-300-60': ('foam', 120), 'hellfoam-300-60': ('foam', 80)}
+                'carpet-foam-xl-300-60': ('foam', 120), 'libital-fog-300-15': ('smoke', 45), 'aiuri-fog-100-15': ('smoke', 30),
+                'cleaner-smoke-300-60': ('smoke', 180), 'lube-foam-300-60': ('foam', 120), 'hf-300-60-acid-sleep-nolube-40': ('foam', 40)}
         for rid, (kind, tiles) in want.items():
             r, rig = self.build(rid)
             tot = sum(e['tiles'] for e in effects(rig, kind)); self.assertEqual(tot, tiles, rid)
@@ -117,10 +117,10 @@ class RecipeTable(unittest.TestCase):
         self.assertIn(self.db.find_reagent('black carpet'), t); self.assertNotIn(self.db.find_reagent('carpet'), t)
 
     def test_fog_doses(self):
-        r, rig = self.build('libital-fog-100-15'); t = effects(rig, 'smoke')[0]['tile']
-        self.assertAlmostEqual(t[self.db.find_reagent('libital')], 30)
+        r, rig = self.build('libital-fog-300-15'); t = effects(rig, 'smoke')[0]['tile']
+        self.assertAlmostEqual(t[self.db.find_reagent('libital')], 135)
         r, rig = self.build('aiuri-fog-100-15'); t = effects(rig, 'smoke')[0]['tile']
-        self.assertAlmostEqual(t[self.db.find_reagent('aiuri')], 20)
+        self.assertAlmostEqual(t[self.db.find_reagent('aiuri')], 60)
 
     def test_smart_foam_needs_smart_agent_before_aluminium(self):
         r = self.book['smart-foam-300']

@@ -222,7 +222,9 @@ def _run(db, ops, tier, reverse, gear=None):
 def signature(rig):
     out = []
     for e in rig.sim.effects:
-        out.append((e['kind'], e.get('tiles'), tuple(sorted((k, round(v, 1)) for k, v in e.get('tile', {}).items())), e.get('range'), e.get('max')))
+        import tileapply
+        wet_order = tuple(k for k in e.get('tile', {}) if tileapply._wet_effects(k))      # the order wet / drying chemicals sit in the tile decides how long the floor stays slick (each is applied in turn every tick)
+        out.append((e['kind'], e.get('tiles'), tuple(sorted((k, round(v, 1)) for k, v in e.get('tile', {}).items())), e.get('range'), e.get('max'), wet_order))
     out.append(('beaker', tuple(sorted((k, round(v[0], 1)) for k, v in rig.beaker.r.items()))))     # what is left in the beaker (the product of a plain chem recipe)
     return tuple(out)
 
@@ -509,6 +511,28 @@ def stats_cmd(args):
     print(statspanel.mix_text(statspanel.mix_block(db, mix, 'Mix')))
     return 0
 
+def fixbroken_cmd(args):
+    import fixes
+    db = DB()
+    built = fixes.build_all(db, log=lambda m: print(m, flush=True))
+    for rid, why in fixes.REMOVE.items(): print('  remove %-24s %s' % (rid, why))
+    if args.apply:
+        fixes.apply(db, built); print('applied: %d rebuilt, %d removed' % (len(built), len(fixes.REMOVE)))
+    return 0
+
+def hellfoam_cmd(args):
+    import hellfoam
+    db = DB(); combos = [(b, y) for b in (100, 300) for y in (15, 60) if (args.beaker in (None, b)) and (args.syringe in (None, y))]
+    entries = []
+    for b, y in combos:
+        print('== %du beaker + %du syringe' % (b, y), flush=True)
+        got = hellfoam.generate(db, b, y, log=lambda m: print(m, flush=True))
+        print('   %d hellfoams' % len(got), flush=True); entries += got
+    if args.publish:
+        n = hellfoam.publish(db, entries, remove=[] if args.keep_old else hellfoam.OLD_IDS)
+        print('published %d hellfoams' % n)
+    return 0
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest='cmd')
@@ -546,7 +570,13 @@ def main(argv=None):
     a.add_argument('mix', help='contents of ONE tile: "lube 64, thermite 40"'); a.add_argument('--air', type=float, default=293.15, help='air temperature in K (wet floors dry faster when hot)')
     a = sub.add_parser('scale', help='make the bigger-beaker version of existing nade recipes (keeps the trigger, scales the payload)')
     a.add_argument('ids', nargs='+'); a.add_argument('--beaker', type=int, default=300); a.add_argument('--publish', action='store_true'); a.add_argument('-v', '--verbose', action='store_true')
+    a = sub.add_parser('hellfoam', help='design hellfoams for a beaker + syringe (stoichiometric payload blocks, scored on the exposure model, proven with the engine)')
+    a.add_argument('--beaker', type=int, choices=[100, 300]); a.add_argument('--syringe', type=int, choices=[15, 60]); a.add_argument('--publish', action='store_true')
+    a.add_argument('--keep-old', action='store_true', help='do not remove the old long-lube hellfoams when publishing')
+    a = sub.add_parser('fixbroken', help='rebuild the BROKEN recipes from exact amounts (or remove the ones with no exact version that fits)'); a.add_argument('--apply', action='store_true')
     args = ap.parse_args(argv)
+    if args.cmd == 'fixbroken': return fixbroken_cmd(args)
+    if args.cmd == 'hellfoam': return hellfoam_cmd(args)
     if args.cmd == 'scale': return scale_cmd(args)
     if args.cmd == 'tile': return tile_cmd(args)
     if args.cmd in ('mix', 'stats'): return stats_cmd(args)

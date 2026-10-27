@@ -34,7 +34,7 @@ class Book(unittest.TestCase):
         n = 0
         for e in self.recipes:
             names = [o[1] for o in e['ops'] if o[0] == 'dispense']
-            if e['type'] == 'hell' and 'stable plasma' in names:
+            if e['type'] == 'hell' and 'stable plasma' in names and 'phosphorus' in names:   # phlogiston (phosphorus + sulfuric acid + plasma); the lube package also uses stable plasma
                 n += 1; self.assertLess(names.index('iron'), names.index('stable plasma'), e['id'])
         self.assertGreater(n, 0)
 

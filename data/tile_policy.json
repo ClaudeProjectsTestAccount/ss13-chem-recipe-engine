@@ -1,5 +1,21 @@
 {
  "_readme": "Targets the recipe checker holds foam / smoke recipes to. A recipe that goes over is FLAGGED (shown on the card and listed by 'book rebuild'), never refused. A recipe can set lube_ok: true when a long lube is intended.",
  "slick_max_s": 15,
- "slick_note": "Hellfoam effects play out in 10-15 s; a floor that stays slick much longer only gets in the way."
+ "slick_note": "Hellfoam effects play out in 10-15 s; a floor that stays slick much longer only gets in the way.",
+ "support": {
+  "_readme": "Chemicals that do nothing in the foam / smoke but that the recipe cannot be made without: reagent -> products that need it present. They are not counted as wasted (they still take beaker space, so keep them to the minimum the dispenser allows).",
+  "/datum/reagent/stabilizing_agent": {
+   "for": [
+    "/datum/reagent/phlogiston"
+   ],
+   "why": "phlogiston wipes the beaker and starts a 1000 K fireball on the borg unless stabilizing agent is in the beaker when it forms"
+  },
+  "/datum/reagent/blood": {
+   "for": [
+    "/datum/reagent/carpet",
+    "/datum/reagent/carpet/black"
+   ],
+   "why": "the unstable mutagen to blood step of the carpet recipe needs a blood seed to start"
+  }
+ }
 }

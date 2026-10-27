@@ -60,7 +60,7 @@ class Display(unittest.TestCase):
         self.assertLess(len(c['steps']), len(self.book['chem-cure-100-mutadone']['ops']))
 
     def test_spill_units_and_chemicals_are_tagged(self):
-        c = book.simulate(self.db, self.book['hellfoam-300-60'])
+        c = book.simulate(self.db, self.book['hf-300-60-acid-sleep-nolube-40'])
         kinds = {p[0] for s in c['steps'] for p in s['parts'] + [q for it in s.get('items', []) for q in it]}
         self.assertTrue({'u', 'c', 'x'} <= kinds, kinds)
         self.assertTrue(any(p[0] == 'x' and 'SPILL' in p[1] for s in c['steps'] for p in s['parts']))

@@ -14,7 +14,6 @@
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 .wrap{max-width:60rem;margin:0 auto;padding:1.25rem 16px 4rem}
 h1{font-size:1.6rem;margin:.2rem 0 .4rem}
-.lede{color:var(--mute);margin:0 0 1rem}
 .bar{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:1rem 0}
 .bar input[type=search]{flex:1 1 14rem;min-width:0;padding:.55rem .75rem;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
 button{font:inherit;padding:.5rem .8rem;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);cursor:pointer}
@@ -88,54 +87,62 @@ ol.steps ol.items li::before{content:counter(it);position:absolute;left:.25rem;t
 code{font:.9em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--chip);padding:.05em .3em;border-radius:4px}
 
 details.group{border:2px solid var(--accent);border-radius:14px;margin:1rem 0;background:var(--card)}
-details.group>summary.hero{display:grid;grid-template-columns:minmax(0,15rem) 1fr;gap:1rem 1.2rem;padding:.9rem;align-items:center;border-radius:12px}
-figure.hero-fig{margin:0}figure.hero-fig figcaption{font-size:.74rem;color:var(--mute);margin-top:.3rem;font-weight:400;line-height:1.3}
+details.group>summary.hero{display:block;padding:.6rem .8rem .7rem;border-radius:12px}
 details.group>summary.hero::before{display:none}
 details.group[open]>summary.hero{border-bottom:2px solid var(--accent);border-radius:12px 12px 0 0}
-.hero-img{width:100%;height:auto;aspect-ratio:640/600;object-position:50% 70%;border-radius:10px;border:1px solid var(--line)}
-.eyebrow{display:inline-block;background:var(--accent);color:var(--accent-ink);font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:.78rem;padding:.12rem .6rem;border-radius:999px}
-.hero-text h2{margin:.35rem 0 .2rem;font-size:1.45rem;line-height:1.2}
-.hero-text p{margin:.1rem 0 .6rem;color:var(--mute);font-weight:400}
-dl.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:.35rem .8rem;margin:.2rem 0 .5rem;font-weight:400}
-dl.meta div{background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:.3rem .55rem}
-dl.meta dt{font-size:.74rem;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
-dl.meta dd{margin:0;font-weight:650;font-size:.98rem}
-.hint{font-size:.85rem;color:var(--accent);font-weight:600}
-details.group[open] .hint .c{display:none}
-details.group:not([open]) .hint .o{display:none}
+.hero-top{display:flex;align-items:center;gap:.8rem;flex-wrap:nowrap}
+figure.hero-fig{margin:0;display:flex;align-items:center;gap:.5rem;flex:none}
+figure.hero-fig figcaption{font-size:.6rem;color:var(--mute);font-weight:400;line-height:1.25;max-width:7rem}
+.hero-img{width:4.6rem;height:4.3rem;object-fit:cover;object-position:50% 70%;border-radius:8px;border:1px solid var(--line)}
+.hero-title{flex:1 1 auto;margin:0;font:900 1.9rem/1.05 "Arial Black","Segoe UI Black",Impact,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.045em;color:var(--t1);background:linear-gradient(100deg,var(--t1),var(--t2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-shadow:none;filter:drop-shadow(0 1px 0 rgba(0,0,0,.18))}
+.count-chip{flex:none;font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);border:1px solid var(--line);border-radius:999px;padding:.05rem .55rem;background:var(--chip)}
+.s1{--t1:#0a8f78;--t2:#1769b3;--b1:#0e9f7e;--b2:#145f9c}
+.s2{--t1:#9a3fc4;--t2:#d4530f;--b1:#8e3bbd;--b2:#d4530f}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .s1{--t1:#4fe0c0;--t2:#6db8ff}:root:not([data-theme=light]) .s2{--t1:#d896ff;--t2:#ffa066}}
+:root[data-theme=dark] .s1{--t1:#4fe0c0;--t2:#6db8ff}:root[data-theme=dark] .s2{--t1:#d896ff;--t2:#ffa066}
+.hero-btn{display:flex;align-items:center;justify-content:center;gap:.6rem;margin-top:.55rem;min-height:4.6rem;padding:.5rem 1rem;border-radius:12px;border:3px solid rgba(255,255,255,.55);outline:2px solid var(--b2);color:#fff;text-align:center;
+  font:900 1.65rem/1.1 "Arial Black","Segoe UI Black",Impact,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.1em;text-shadow:0 2px 0 rgba(0,0,0,.35),0 0 12px rgba(0,0,0,.25);
+  background:repeating-linear-gradient(135deg,rgba(255,255,255,.13) 0 10px,rgba(255,255,255,0) 10px 22px),linear-gradient(180deg,var(--b1),var(--b2));background-size:44px 44px,100% 100%;
+  box-shadow:0 5px 0 rgba(0,0,0,.35),0 8px 18px rgba(0,0,0,.28),inset 0 2px 0 rgba(255,255,255,.35);transition:transform .15s,box-shadow .15s,filter .15s;animation:slide 6s linear infinite paused}
+details.group>summary.hero:hover .hero-btn{transform:translateY(-3px);filter:brightness(1.18) saturate(1.15);box-shadow:0 8px 0 rgba(0,0,0,.35),0 14px 26px rgba(0,0,0,.35),inset 0 2px 0 rgba(255,255,255,.45);animation-play-state:running}
+details.group>summary.hero:active .hero-btn{transform:translateY(2px);box-shadow:0 2px 0 rgba(0,0,0,.35)}
+@keyframes slide{to{background-position:44px 0,0 0}}
+.peek{max-height:0;opacity:0;overflow:hidden;pointer-events:none;user-select:none;filter:grayscale(1);transition:max-height .28s ease,opacity .25s,margin .25s;display:flex;flex-wrap:wrap;gap:.4rem}
+.peek span{flex:1 1 11rem;background:var(--chip);border:1px dashed var(--line);border-radius:8px;padding:.35rem .6rem;font-size:.9rem;font-weight:650;color:var(--mute)}
+details.group:not([open])>summary.hero:hover .peek,details.group:not([open])>summary.hero:focus-visible .peek{max-height:9rem;opacity:.5;margin-top:.6rem}
+details.group[open] .peek{display:none}
+details.group[open] .hero-btn .c{display:none}details.group:not([open]) .hero-btn .o{display:none}
+@media (prefers-reduced-motion:reduce){.hero-btn{animation:none;transition:none}.peek{transition:none}}
+@media (max-width:560px){.hero-title{font-size:1.3rem}figure.hero-fig figcaption{display:none}.hero-btn{font-size:1.15rem;letter-spacing:.06em}}
 .group-body{padding:.3rem .6rem .8rem}
 .planned{margin:1rem 0}
 .planned .pl{border:2px dashed var(--line);border-radius:14px;padding:.75rem .95rem;margin:.6rem 0;color:var(--mute)}
 .planned .pl b{color:var(--ink)}
-details.group>summary.hero.nofig{grid-template-columns:1fr}
 @media (max-width:560px){ol.steps li.done{padding-right:6.6rem}ol.steps li.done::after{font-size:.8rem;padding:0 .3rem;letter-spacing:.08em}button.reset{font-size:.98rem}}
-@media (max-width:560px){details.group>summary.hero{grid-template-columns:1fr}.hero-img{aspect-ratio:640/420;object-fit:cover}}
 .hidden{display:none!important}
 .empty{color:var(--mute);padding:.6rem .95rem}
-footer{margin-top:2rem;color:var(--mute);font-size:.88rem}
+footer{margin-top:2rem;color:var(--mute);font-size:.68rem;line-height:1.35}
 a{color:var(--accent)}
 </style>
 </head>
 <body>
 <div class="wrap">
 <h1>Monkestation Chem Recipe Book</h1>
-<p class="lede">Recipes the chemistry simulator has worked out from the game code. Sections are collapsed to start with: open one, pick a gear tier, open a type, open a recipe and follow the numbered steps.</p>
-
 <div class="bar">
   <input id="q" type="search" placeholder="Filter recipes (e.g. hell, lube, wall, libital)" aria-label="Filter recipes">
   <button id="expand" type="button">Expand all</button>
   <button id="collapse" type="button">Collapse all</button>
 </div>
 
-<details class="group" id="g-medborg"><summary class="hero">
-  <figure class="hero-fig"><img class="hero-img" src="/*__HERO_IMG__*/" alt="Watercolor of Birdbrain, a white medical cyborg on a yellow-green repulsor, giving a clown a hypospray in a teal medbay cutaway. Ian the corgi wears a hat beside them." width="640" height="600"><figcaption>&ldquo;Everyone Gets a Lollipop&rdquo;, medbay cutaway (v2). Birdbrain, Chief Boo-Boo Officer.</figcaption></figure>
-  <div class="hero-text">
-    <span class="eyebrow">Section 1 &middot; Medborg chem nade recipes</span>
-    <h2>Medical cyborg chem nades</h2>
-    <p>Foam and smoke grenades mixed with the medborg's own syringe and beaker from a chem dispenser. Pick your gear tier inside.</p>
-    <dl class="meta" id="meta"></dl>
-    <span class="hint"><span class="c">&#9656; Click to open the medborg recipes</span><span class="o">&#9662; Click to close</span></span>
-  </div></summary>
+<details class="group" id="g-medborg"><summary class="hero s1">
+  <div class="hero-top">
+    <figure class="hero-fig"><img class="hero-img" src="/*__HERO_IMG__*/" alt="Watercolor of Birdbrain, a white medical cyborg on a yellow-green repulsor, giving a clown a hypospray in a teal medbay cutaway. Ian the corgi wears a hat beside them." width="640" height="600" title="Everyone Gets a Lollipop, medbay cutaway (v2). Birdbrain, Chief Boo-Boo Officer."><figcaption>&ldquo;Everyone Gets a Lollipop&rdquo;<br>Birdbrain, Chief Boo-Boo Officer</figcaption></figure>
+    <h2 class="hero-title">Medical Cyborg Chem Nades</h2>
+    <span class="count-chip" id="mcount"></span>
+  </div>
+  <span class="hero-btn"><span class="c">&#9656; Open the medborg recipes</span><span class="o">&#9662; Close the medborg recipes</span></span>
+  <div class="peek" id="peek1" aria-hidden="true"></div>
+</summary>
 <div class="group-body">
 <details class="guide" id="guide"><summary>How to make a borg chem nade <span class="sub">the idea, what you need, how to read a recipe</span></summary>
 <div class="body">
@@ -175,14 +182,14 @@ a{color:var(--accent)}
 <div id="tiers"></div>
 </div></details>
 
-<details class="group" id="g-chem"><summary class="hero nofig">
-  <div class="hero-text">
-    <span class="eyebrow">Section 2 &middot; Chemistry recipes, no upgrades</span>
-    <h2>Chemistry recipes</h2>
-    <p>Medicines and useful chemicals anyone can make from a chem dispenser alone: no other department, no special ingredients. Pick your beaker size inside.</p>
-    <dl class="meta" id="cmeta"></dl>
-    <span class="hint"><span class="c">&#9656; Click to open the chemistry recipes</span><span class="o">&#9662; Click to close</span></span>
-  </div></summary>
+<details class="group" id="g-chem"><summary class="hero s2">
+  <div class="hero-top">
+    <h2 class="hero-title">Chemistry Recipes</h2>
+    <span class="count-chip" id="ccount"></span>
+  </div>
+  <span class="hero-btn"><span class="c">&#9656; Open the chemistry recipes</span><span class="o">&#9662; Close the chemistry recipes</span></span>
+  <div class="peek" id="peek2" aria-hidden="true"></div>
+</summary>
 <div class="group-body">
 <details class="guide" id="cguide"><summary>How to read a chemistry recipe <span class="sub">clicks, heating, leftovers</span></summary>
 <div class="body">
@@ -258,6 +265,7 @@ function summaryChips(r){
   } else if(s.kind==='vortex') c.appendChild(chip('range '+s.range+' tiles'));
   else if(s.kind==='mobspawn') c.appendChild(chip('1 to '+s.mobs+' mobs'));
   if(r.stats&&r.stats.broken) c.appendChild(chip('BROKEN: wasted chems','danger'));
+  var fs=r.stats&&r.stats.exp&&r.stats.exp.floor_safety; if(fs&&(!fs.safe||r.type==='hell')){ var fc=chip(fs.safe?'floor-safe':'DESTROYS FLOOR', fs.safe?'safe':'danger'); fc.title=fs.safe?'Nothing in the mix melts or burns away the floor tile (no thermite coat, chlorine trifluoride or acid of power 200+). Fire only scorches, acids only mark the tile and eat items lying on it.':fs.reasons.join('; '); c.appendChild(fc); }
   if(r.stats&&r.stats.flags) r.stats.flags.forEach(function(f){ if(f.id==='lube-long') c.appendChild(chip((f.ok?'long lube (intended)':'LUBE TOO LONG')+': '+r.stats.exp.slick.total+' s', f.ok?'caution':'danger')); });
   if(s.fill!=null) c.appendChild(chip('beaker '+s.fill+'% used'));
   c.appendChild(chip(HARM[r.harm]||r.harm, r.harm));
@@ -327,6 +335,7 @@ function expPanel(x, into){
   into.appendChild(el('div','hot','Covers up to '+x.tiles+' tiles for about '+x.life+' s. Each '+x.dt+' s tick every chemical in a tile is applied to everyone in it: '+x.frac+'% of the tile contents per tick, '+x.calls+' ticks = about '+Math.round(x.frac*x.calls)+'% of the tile over its whole life. Tile holds '+x.tile_total+'u.'));
   var rows=x.chems.map(function(c){ return tr([c.n, nc(c.tile+'u'), nc(c.per+'u'), nc((c.per*x.calls).toFixed(1)+'u'), c.pen? (foam?'yes':'breathed in') : 'no (contact only)', c.contact||'']); });
   into.appendChild(tbl(['Payload chemical','In tile','Per tick','Whole life','Gets into blood?','Contact effect (works through any clothing)'], rows));
+  if(x.needed&&x.needed.length){ var nd=el('div','hot'); nd.appendChild(el('b',null,'Needed but passive (not counted as wasted): ')); nd.appendChild(document.createTextNode(x.needed.map(function(i){ return i.n+' '+i.u+'u per tile, for '+i.for_.join(', ')+' ('+i.why+')'; }).join('; ')+'.')); into.appendChild(nd); }
   if(x.slick) slickPanel(x.slick, into);
   if(x.floor) floorPanel(x.floor, into);
   var rl=el('ul','rules'); x.rules.forEach(function(r){ rl.appendChild(el('li',null,r)); });
@@ -401,25 +410,14 @@ function isChem(r){ return r.group==='chem'; }
 function fits(r,b,s){ if(isChem(r)) return false; return b===0 ? r.beaker===0 : (r.beaker===b && r.syringes.indexOf(s)>=0); }
 
 function buildMeta(){
-  var rs=DATA.recipes.filter(function(r){return !isChem(r);}), tiles=0, foam=0, smoke=0, other=0;
-  rs.forEach(function(r){ var k=r.summary.kind; if(k==='foam')foam++; else if(k==='smoke')smoke++; else other++; if(r.summary.tiles>tiles) tiles=r.summary.tiles; });
-  var rows=[['Recipes', rs.length+' ('+foam+' foam, '+smoke+' smoke'+(other?', '+other+' other':'')+')'],
-            ['Gear tiers','100u / 300u beaker x 15u / 60u syringe'],
-            ['Biggest cloud', tiles+' tiles'],
-            ['Beaker sizes','100u borg default, 300u bluespace; two of each'],
-            ['Dispenser clicks','5, 10, 15, 20, 25, 30, 50, 100u'],
-            ['Foam','2 tiles per u of trigger, lasts 8 s, 3.2x payload'],
-            ['Smoke','3 tiles per u of trigger, lasts 20 s'],
-            ['Rules snapshot', DATA.rules]];
-  var dl=document.getElementById('meta');
-  rows.forEach(function(r){ var d=el('div'); d.appendChild(el('dt',null,r[0])); d.appendChild(el('dd',null,r[1])); dl.appendChild(d); });
+  var n=DATA.recipes.filter(function(r){return !isChem(r);}).length;
+  document.getElementById('mcount').textContent=n+' recipes';
+  var pk=document.getElementById('peek1'); TIERS.forEach(function(T){ pk.appendChild(el('span',null,T[2])); });
 }
 function buildChem(){
   var cs=DATA.recipes.filter(isChem), root=document.getElementById('ctiers');
-  var heated=cs.filter(function(r){return r.needs.some(function(n){return /heater/.test(n);});}).length;
-  var dl=document.getElementById('cmeta');
-  [['Recipes',cs.length+' ('+heated+' need a chem heater)'],['Beakers','50u regular, 100u large, 300u bluespace'],['Needs','a chem dispenser with the basic reagent list'],['Rules snapshot',DATA.rules]].forEach(function(r){
-    var d=el('div'); d.appendChild(el('dt',null,r[0])); d.appendChild(el('dd',null,r[1])); dl.appendChild(d); });
+  document.getElementById('ccount').textContent=cs.length+' recipes';
+  var pk=document.getElementById('peek2'); CTIERS.forEach(function(T){ pk.appendChild(el('span',null,T[1])); });
   CTIERS.forEach(function(T){
     var rs=cs.filter(function(r){return r.beaker===T[0];});
     if(!rs.length && T[0]===300) return;
