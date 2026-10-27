@@ -154,6 +154,48 @@ def exposure_block(db, x, air_k=293.15):
     return dict(slick=slick_block(ta.slick_report(rep['kind'], rep['tiles'], x['tile'], air_k)), floor=floor_block(rep), inert=inert_chems(rep), needed=needed, floor_safety=ta.floor_safety(rep['kind'], rep['tiles'], x['tile'], air_k), kind=rep['kind'], tiles=rep['tiles'], frac=r2(100 * rep['fraction'], 2), calls=rep['calls'], dt=rep['dt'], life=rep['life'], tile_total=r2(rep['tile_total'], 1),
                 chems=chems, rules=RULES[rep['kind']], scenarios=[scenario_row(s, names) for s in rep['scenarios']])
 
+# organ damage that ends the organ (usual game values: the organ definitions are not in the checked-out source)
+ORGAN_LIMIT = dict(eyes=50, ears=50, brain=200, lungs=120)
+ORGAN_DEFAULT = 100
+
+def od_block(mix, scenarios=None):
+    """overdoses that are actually REACHED -> [dict(n, od, sev, note, tick, organ, tags, dose, who)] ([] when none).
+    Foam / smoke: a chemical counts when someone's blood level gets to its threshold in at least one protection scenario (who = those scenarios and the time it takes).
+    Plain mix: it counts when the dose of that chemical is at or over its threshold."""
+    out = []
+    for r in mix['rows']:
+        if not r['od']: continue
+        who = []; peak = 0
+        if scenarios is not None:
+            for s in scenarios:
+                b = s.get('blood')
+                if not b: continue
+                peak = max(peak, b['peak'].get(r['n'], 0))
+                if r['n'] in b['od']: who.append(dict(name=s['name'], secs=b['od'][r['n']]))
+            if not who: continue
+            dose = r2(peak, 1)
+        else:
+            if r['u'] < r['od'] - 1e-9: continue
+            dose = r['u']
+        fx = r['odfx']
+        out.append(dict(n=r['n'], od=r['od'], sev=r['sev'], note=r['odnote'], tick=fx['tick'], organ=fx['organ'], tags=fx['tags'], dose=dose, who=who))
+    return out
+
+def organ_warn(mix, scenarios):
+    """organ damage a dose of this recipe does that reaches the organ's limit -> [dict(slot, dmg, limit, by, who)]"""
+    by = {o['slot']: o['by'] for o in mix['organ'] if not o['heal']}
+    worst = {}
+    for s in scenarios:
+        b = s.get('blood')
+        if not b: continue
+        for slot, v in b['organ'].items():
+            if v > 0: worst.setdefault(slot, []).append((v, s['name']))
+    out = []
+    for slot, lst in worst.items():
+        dmg = max(v for v, _ in lst); lim = ORGAN_LIMIT.get(slot, ORGAN_DEFAULT)
+        if dmg >= lim: out.append(dict(slot=slot, dmg=r2(dmg, 0), limit=lim, by=by.get(slot, []), who=sorted({n for v, n in lst if v >= lim})))
+    return out
+
 def build(db, e, rig):
     """-> dict for the page, or None when there is nothing to show.  Foam / smoke: the tile mix plus the exposure table.
     Plain chemical recipes: only when the recipe lists a `mix` (name -> units) it is meant to be used as."""
@@ -163,6 +205,7 @@ def build(db, e, rig):
         x = fx[0]
         out['mix'] = mix_block(db, x['tile'], 'What each tile of the %s carries (per tile, all at once)' % x['kind'])
         out['exp'] = exposure_block(db, x)
+        out['od'] = od_block(out['mix'], out['exp']['scenarios']); out['organ_warn'] = organ_warn(out['mix'], out['exp']['scenarios'])
         out['broken'] = bool(out['exp']['inert'])
         sl = out['exp']['slick']
         out['flags'] = []
@@ -180,6 +223,7 @@ def build(db, e, rig):
             if p is None: raise ValueError('mix: unknown chemical %r' % n)
             mix[p] = float(u)
         out['mix'] = mix_block(db, mix, 'What this mix does (%gu total)' % sum(mix.values()))
+        out['od'] = od_block(out['mix']); out['organ_warn'] = []
     return out or None
 
 # ---------------------------------------------------------------- plain text (CLI, for the AI)

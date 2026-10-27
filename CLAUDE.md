@@ -10,6 +10,8 @@ A unified look matters more than any single widget. Whenever code defines a **vi
 ### UI module registry (src/page_template.html; keep this list current)
 - **Tooltips**: `tip(element, text)` + the `#tip` CSS block ("UI MODULE: tooltips"). The ONLY way to make a tooltip. Never use the `title` attribute or `.title=` for tooltips. Style: big bold italic serif text, solid gold bevelled border, dark fill; one delegated listener draws it (mouse, keyboard focus, touch). Change the look in the `--tip-*` variables / `#tip` rules only.
 - **Menu ladder** (collapsibles): section `details.group` (big hover-reactive button) > gear tier `details.tier` (indigo band) > recipe group `details.type` (amber tab) > recipe `details.recipe` (blue card); guides `details.guide` (green dashed). Add a new menu level by giving it its own class in this ladder.
+- **One-open-menu rule**: `menus` module + `MENU_KINDS` list. Sibling menus of the same kind are exclusive: clicking one open closes the others (and the menus inside them); programmatic opens (Expand all, search, deep links) are exempt. A new kind of menu only needs adding to `MENU_KINDS`; never write per-menu open/close logic.
+- **Overdose / organ warnings**: `statspanel.od_block` / `organ_warn` + `odPanel()`; the box renders only when something is reached.
 - **Chips**: `chip(text, cls)`; chip rows `chipRow(list)`.
 
 Tests: `tests/test_ui_modules.py` fails if a tooltip is made with the title attribute or if the tooltip module is missing.

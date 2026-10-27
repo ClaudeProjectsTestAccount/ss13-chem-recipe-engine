@@ -145,6 +145,11 @@ details.group[open] .hero-btn .c{display:none}details.group:not([open]) .hero-bt
 #tip .tip-t{--c:calc(var(--tip-bev) - .586 * var(--tip-bd));padding:.55rem .85rem;background:var(--tip-bg);color:var(--tip-ink);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);clip-path:polygon(var(--c) 0,calc(100% - var(--c)) 0,100% var(--c),100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,var(--c) 100%,0 calc(100% - var(--c)),0 var(--c));
   font:italic 650 1.15rem/1.35 Georgia,"Iowan Old Style","Palatino Linotype",serif;letter-spacing:.01em;overflow-wrap:anywhere}
 @media (prefers-reduced-motion:reduce){#tip{transition:none;transform:none}}
+.od{border:2px solid var(--danger);border-left-width:8px;border-radius:10px;background:var(--card);padding:.2rem .8rem .6rem;margin:.6rem 0}
+.od h4{margin:.4rem 0;color:var(--danger)}
+.od-row{padding:.35rem 0;border-top:1px dashed var(--line)}.od-row:first-of-type{border-top:0}
+.od-row b{font-size:1.02rem}.od-n{margin-left:.5rem;color:var(--danger);font-weight:650}
+.od-fx,.od-who{font-size:.9rem;color:var(--mute)}
 .hidden{display:none!important}
 .empty{color:var(--mute);padding:.6rem .95rem}
 footer{margin-top:2rem;color:var(--mute);font-size:.68rem;line-height:1.35}
@@ -194,7 +199,6 @@ a{color:var(--accent)}
 <li>When several neighbouring dispenser steps add the same number of units, they are shown as <b>one step with a numbered list</b>: do them top to bottom, in that order. The tool picks click sizes so that you change dispenser buttons as rarely as possible, so 20u may be shown as two 10u clicks because the next chemical is also 10u. The beaker still ends up exactly the same.</li>
 <li>"Dispenser: 45u water (a 30u click, then a 15u click)" means exactly those buttons. The dispenser offers 5, 10, 15, 20, 25, 30, 50 and 100 unit buttons, and a click never puts in more than the free space in the beaker.</li>
 <li><b>Tiles</b> is how far the foam or smoke spreads. <b>Per tick</b> is how much payload lands on each tile every 0.2 s (foam) or 2 s (smoke) tick. <b>Beaker used</b> is how full the beaker was when it fired: recipes are tuned to use all of it.</li>
-<li>"Order matters" means a wrong order makes a different reaction. "Any order works" means the dispense order does not change the result.</li>
 </ul>
 <h3>Click flow (from the code, not tested in a round)</h3>
 <ul>
@@ -273,6 +277,21 @@ var tip=(function(){
   document.addEventListener('keydown',function(e){ if(e.key==='Escape') hide(); });
   return function(e,text){ if(text) e.dataset.tip=text; else delete e.dataset.tip; return e; };
 })();
+/* ===== UI MODULE: one-open-menu rule. Menus of the same kind that are siblings (same parent) are exclusive: opening one by clicking its summary closes the others (and everything inside them).
+   Register a kind once in MENU_KINDS; that is all a new menu type needs. Programmatic opens (Expand all, search, deep links) are not affected. ===== */
+var MENU_KINDS=['details.group','details.tier','details.type','details.recipe','details.guide'];
+var menus=(function(){
+  function closeAll(d){ d.open=false; d.querySelectorAll(MENU_KINDS.join(',')).forEach(function(x){ x.open=false; }); }      // inner panels (details.fx) keep their own state
+  document.addEventListener('click',function(e){
+    var s=e.target.closest&&e.target.closest('summary'); if(!s||e.defaultPrevented) return;
+    var d=s.parentElement; if(!d||d.tagName!=='DETAILS'||d.open) return;               // only when this click is about to OPEN it
+    if(!MENU_KINDS.some(function(k){ return d.matches(k); })) return;
+    var kind=MENU_KINDS.filter(function(k){ return d.matches(k); })[0], top=s.getBoundingClientRect().top, shut=false;
+    Array.prototype.forEach.call(d.parentElement.children,function(o){ if(o!==d&&o.matches(kind)&&o.open){ closeAll(o); shut=true; } });
+    if(shut) requestAnimationFrame(function(){ window.scrollBy(0,s.getBoundingClientRect().top-top); });   // keep what you clicked under the pointer
+  },true);
+  return {kinds:MENU_KINDS};
+})();
 function kv(label, text, cls){ var d=el('div','kv'+(cls?' '+cls:'')); d.appendChild(el('b',null,label+' ')); d.appendChild(document.createTextNode(text)); return d; }
 function chip(text, cls){ return el('span','chip'+(cls?' '+cls:''), text); }
 
@@ -308,6 +327,8 @@ function summaryChips(r){
   } else if(s.kind==='vortex') c.appendChild(chip('range '+s.range+' tiles'));
   else if(s.kind==='mobspawn') c.appendChild(chip('1 to '+s.mobs+' mobs'));
   if(r.stats&&r.stats.broken) c.appendChild(chip('BROKEN: wasted chems','danger'));
+  if(r.stats&&r.stats.od&&r.stats.od.length){ var oc=chip('OVERDOSE: '+r.stats.od.map(function(o){return o.n;}).join(', '),'danger'); tip(oc,'The blood level of these chemicals reaches their overdose threshold. See "Overdoses reached" below.'); c.appendChild(oc); }
+  if(r.stats&&r.stats.organ_warn&&r.stats.organ_warn.length){ var wc=chip(r.stats.organ_warn.map(function(o){return o.slot;}).join(', ')+' damage','caution'); tip(wc,'One full dose does enough damage to destroy these organs. See "Overdoses reached" below.'); c.appendChild(wc); }
   var fs=r.stats&&r.stats.exp&&r.stats.exp.floor_safety; if(fs&&(!fs.safe||r.type==='hell')){ var fc=chip(fs.safe?'floor-safe':'DESTROYS FLOOR', fs.safe?'safe':'danger'); tip(fc,fs.safe?'Nothing in the mix melts or burns away the floor tile (no thermite coat, chlorine trifluoride or acid of power 200+). Fire only scorches, acids only mark the tile and eat items lying on it.':fs.reasons.join('; ')); c.appendChild(fc); }
   if(r.stats&&r.stats.flags) r.stats.flags.forEach(function(f){ if(f.id==='lube-long') c.appendChild(chip((f.ok?'long lube (intended)':'LUBE TOO LONG')+': '+r.stats.exp.slick.total+' s', f.ok?'caution':'danger')); });
   if(s.fill!=null) c.appendChild(chip('beaker '+s.fill+'% used'));
@@ -327,16 +348,13 @@ function fxNet(o){ var s=[]; KN.forEach(function(k){ if(o[k[0]]) s.push(k[1]+' '
 function mixPanel(m, into){
   into.appendChild(el('h4',null,m.title+' - '+m.total+'u'));
   var rows=m.rows.map(function(r){
-    var c=[el('td',null,r.n), nc(r.u), nc(r.f+'%'), nc(r.od_at!=null? r.od_at+'u (OD '+r.od+'u alone)' : (r.od? 'OD '+r.od+'u' : 'none')), nc(r.sev!=null? r.sev : '–')];
+    var c=[el('td',null,r.n), nc(r.u), nc(r.f+'%')];
     KN.slice(0,4).forEach(function(k){ c.push(dmgCell(r.tick[k[0]])); });
     c.push(nc(r.dur+' s')); var row=tr(c); tip(row,r.odnote); return row; });
-  var tot=[el('td',null,'<b>Whole mix, per tick</b>'.replace(/<\/?b>/g,'')), nc(m.total), nc('100%'), el('td'), el('td')];
+  var tot=[el('td',null,'<b>Whole mix, per tick</b>'.replace(/<\/?b>/g,'')), nc(m.total), nc('100%')];
   KN.slice(0,4).forEach(function(k){ tot.push(dmgCell(m.net[k[0]])); }); tot.push(el('td'));
   var trr=tr(tot); trr.style.fontWeight='700'; rows.push(trr);
-  into.appendChild(tbl(['Chemical','Units','Share','Overdoses at (total mix)','OD severity','Brute','Burn','Toxin','Oxygen','Lasts'], rows));
-  var extra=[]; ['clone','stamina'].forEach(function(k){ if(m.net[k]) extra.push((k==='clone'?'Clone ':'Stamina ')+sgn(m.net[k])); });
-  var line='"Overdoses at" = how many units of the WHOLE mix (injected, processed or absorbed) it takes for that chemical to reach its own overdose threshold. Net per 2 s tick: '+fxNet({brute:m.net.brute,burn:m.net.burn,tox:m.net.tox,oxy:m.net.oxy})+(extra.length?' ('+extra.join(', ')+')':'')+'. Negative = healing. Per-tick figures hold while the chemical is in the blood; "Lasts" is how long its own units take to burn off.';
-  into.appendChild(el('div','kv',line));
+  into.appendChild(tbl(['Chemical','Units','Share','Brute','Burn','Toxin','Oxygen','Lasts'], rows));
   var cl=[]; m.rows.forEach(function(r){
     var by={}; (r.cond||[]).forEach(function(c){ (by[c.c]=by[c.c]||[]).push(c); });
     Object.keys(by).forEach(function(k){ cl.push(r.n+': '+by[k].map(function(c){ return c.k+' '+sgn(c.v); }).join(', ')+' per tick when '+(k==='otherwise'?'none of the other conditions apply':k)); });
@@ -383,7 +401,7 @@ function expPanel(x, into){
   if(x.floor) floorPanel(x.floor, into);
   var rl=el('ul','rules'); x.rules.forEach(function(r){ rl.appendChild(el('li',null,r)); });
   var det=el('details','fx'); det.open=true; det.appendChild(el('summary',null,'Rules for how it applies (read this first)')); det.appendChild(rl); into.appendChild(det);
-  into.appendChild(el('h4',null,'What a person takes, by protection'));
+  var pd=el('details','fx'); pd.appendChild(el('summary',null,'What a person takes, by protection (same rules for every recipe)')); var pdb=el('div');
   var head=['Target', foam?'Bio protection':'Breathes it in?', 'Absorbed (whole life)', 'Contact effects', 'In the blood (net)'];
   var srows=x.scenarios.map(function(s){
     var ab=s.absorbed? s.absorbed+'u: '+Object.keys(s.per).map(function(k){ return s.per[k]+'u '+k; }).join(', ') : 'nothing';
@@ -392,14 +410,33 @@ function expPanel(x, into){
     if(s.fire_cover>0&&s.fx.fire) fx.push('(fire armour cuts burn '+s.fire_cover+'%)');
     var bl=s.blood? fxNet(s.blood.totals)+(s.blood.tags.length? '; '+s.blood.tags.map(function(t){return t.l;}).join(', ') : '')+(Object.keys(s.blood.od).length? '; OD: '+Object.keys(s.blood.od).map(function(k){return k+' after '+s.blood.od[k]+' s';}).join(', '):'') : '–';
     var r=tr([s.name, foam? s.block+'% blocked' : (s.breathes?'yes':'NO - blocked'), ab, fx.join(', ')||'none', bl]); tip(r,s.note); return r; });
-  into.appendChild(tbl(head, srows));
-  into.appendChild(el('div','kv sub','Hover a row for notes. "In the blood (net)" is the total damage/healing over the whole time the absorbed chemicals last (not per tick).'));
+  pdb.appendChild(tbl(head, srows));
+  pdb.appendChild(el('div','kv sub','Hover a row for notes. "In the blood (net)" is the total damage/healing over the whole time the absorbed chemicals last (not per tick).')); pd.appendChild(pdb); into.appendChild(pd);
+}
+function odPanel(st, into){
+  var od=st.od||[], ow=st.organ_warn||[]; if(!od.length&&!ow.length) return;
+  var box=el('div','od'); box.appendChild(el('h4',null,od.length&&ow.length?'Overdoses and organ damage':od.length?'Overdoses reached':'Organ damage reached'));
+  od.forEach(function(o){
+    var row=el('div','od-row'); row.appendChild(el('b',null,o.n));
+    row.appendChild(el('span','od-n','overdose at '+o.od+'u in the blood; '+(st.exp?'reaches about '+o.dose+'u':'this mix has '+o.dose+'u')+(o.sev!=null?' (severity '+o.sev+')':'')));
+    var fx=[]; var tk=fxNet({brute:o.tick.brute,burn:o.tick.burn,tox:o.tick.tox,oxy:o.tick.oxy}); if(tk!=='no damage or healing') fx.push(tk+' per tick');
+    Object.keys(o.organ||{}).forEach(function(s){ fx.push((o.organ[s]>0?'damages ':'heals ')+s+' '+sgn(o.organ[s])+' per tick'); });
+    (o.tags||[]).forEach(function(g){ fx.push(g); }); if(o.note) fx.push(o.note);
+    row.appendChild(el('div','od-fx', fx.length? 'While overdosed: '+fx.join('; ')+'.' : 'The code gives no further effect while overdosed.'));
+    if(o.who&&o.who.length) row.appendChild(el('div','od-who','Reached by: '+o.who.map(function(w){ return w.name+' (after '+w.secs+' s)'; }).join('; ')+'.'));
+    box.appendChild(row); });
+  ow.forEach(function(o){
+    var row=el('div','od-row'); row.appendChild(el('b',null,o.slot.charAt(0).toUpperCase()+o.slot.slice(1)+' damage'));
+    row.appendChild(el('span','od-n',o.dmg+' damage from one full dose ('+(o.by.join(', ')||'this mix')+'); the '+o.slot+' fail at about '+o.limit));
+    row.appendChild(el('div','od-who','Applies to: '+o.who.join('; ')+'.')); box.appendChild(row); });
+  into.appendChild(box);
 }
 function statsPanel(st){
   var d=el('details','fx'); d.open=true; d.appendChild(el('summary',null,'Effects (from the game code)'));
   if(st.flags&&st.flags.length) flagBanner(st.flags, d);
   if(st.exp&&st.exp.inert&&st.exp.inert.length) brokenBanner(st.exp.inert, d);
   if(st.mix) mixPanel(st.mix, d);
+  odPanel(st, d);
   if(st.exp) expPanel(st.exp, d);
   return d;
 }
@@ -436,11 +473,6 @@ function recipeCard(r, tier){
   });
   b.appendChild(ol); refresh();
   r.results.forEach(function(l){ b.appendChild(kv('Result:', l)); });
-  var o=r.order;
-  if(r.group==='chem'){
-    if(o.same!==o.total || o.clicks_ok===false || o.reverse_ok===false) b.appendChild(kv('Order:', 'ORDER MATTERS: follow the steps exactly (the order of clicks changes the result).', 'warn'));
-  } else
-  b.appendChild(kv('Order:', o.same===o.total ? 'any dispense order gives this result.' : 'ORDER MATTERS: only '+o.same+' of '+o.total+' dispense orders work, follow the steps exactly.'));
   if(r.stats) b.appendChild(statsPanel(r.stats));
   if(r.notes) b.appendChild(kv('Notes:', r.notes));
   if(r.caution) b.appendChild(kv('Caution:', r.caution));
