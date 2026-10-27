@@ -135,9 +135,52 @@ def plan(db, product, beaker, tier=1, quiet=True):
                     ops, rig, s = cand, r2, s2; improved = True; break
             if improved: break
     ops = prune_heat(db, ops, gear, product, s)
+    ops, fragile = robustify(db, ops, gear, product, s)
     ops = best_order(db, ops, gear, product, s)
     rig = run(db, ops, gear)
-    return dict(ops=ops, made=made(db, rig, product), rig=rig, gear=gear, tree=tree)
+    return dict(ops=ops, made=made(db, rig, product), rig=rig, gear=gear, tree=tree, fragile=fragile)
+
+TEMP_SPREAD = (-planner.HEAT_SLACK, 0, planner.HEAT_TEST_DROP)    # beaker exactly at the heater target / as simulated (HEAT_SLACK under) / HEAT_TEST_DROP K colder than that
+COOL_STEPS = (400, 360, 340, 320)              # thresholds tried for an inserted cool-down step, highest (shortest wait) first
+
+def temp_robust(db, ops, gear, product, want):
+    """does the recipe still give the same result if the beaker is a bit hotter or colder than simulated after every heater step?
+    (the game's heater only approaches its target and cold chems dilute the temperature, so the real value is never exactly the simulated one)"""
+    ok = True; base = None
+    try:
+        for d in TEMP_SPREAD:
+            planner.HEAT_DROP = d
+            rig = run(db, ops, gear)
+            if rig is None or score(db, rig, product, gear.beaker) < want - 1e-6: return False
+            sig = chemcli.signature(rig)
+            if base is None: base = sig
+            elif sig != base: return False
+    finally: planner.HEAT_DROP = 0.0
+    return ok
+
+def robustify(db, ops, gear, product, want):
+    """make the plan survive temperature drift.  tries, in order: as written / heating once at the very end (nothing cold is added to a hot beaker) /
+    a cool-down step after each heater step that is followed by more chemicals (a hot beaker mixes into what you add next).  returns (ops, still_fragile)"""
+    if not any(o[0] == 'heat' for o in ops): return ops, False
+    if temp_robust(db, ops, gear, product, want): return ops, False
+    heats = [o for o in ops if o[0] == 'heat']
+    top = max(o[1] for o in heats)
+    whole = merge_ops([list(o) for o in ops if o[0] != 'heat'] + [['heat', top]])
+    if temp_robust(db, whole, gear, product, want): return whole, False
+    cur = [list(o) for o in ops]
+    for k in reversed(range(len(heats))):                                   # last heater step first
+        hidx = [i for i, o in enumerate(cur) if o[0] == 'heat']
+        i = hidx[k]; h = cur[i]; rest = cur[:i] + cur[i + 1:]
+        found = None
+        for p in range(len(rest), i - 1, -1):                               # latest spot first: nothing cold gets added to the hot beaker
+            for thr in (None,) + COOL_STEPS:
+                if thr is not None and not any(x[0] == 'dispense' for x in rest[p:]): continue
+                c = rest[:p] + [list(h)] + ([['cool', thr]] if thr else []) + rest[p:]
+                if temp_robust(db, c, gear, product, want): found = c; break
+            if found: break
+        if found: cur = found
+    if temp_robust(db, cur, gear, product, want): return cur, False
+    return ops, True
 
 def prune_heat(db, ops, gear, product, want):
     """drop heater steps that the simulation shows are not needed (a later, hotter step often covers an earlier one)"""
@@ -203,7 +246,8 @@ def make_spec(db, p, beaker_units, res, meta):
     """book entry (group 'chem') for a finished plan; the page re-simulates it, so only the labels are written here"""
     m = meta_for(db, p, meta); r = db.reagents[p]; name = db.name(p)
     heats = [o[1] for o in res['ops'] if o[0] == 'heat']
-    notes = ['The heater only approaches its target, so the setpoint is set 20K above what the reaction needs. Take the beaker out when the step says the reaction has fired.'] if heats else []
+    notes = ['The chem heater only approaches its target and never reaches it, so wait until its display shows the temperature in the step before you carry on. Reactions that need heat fire as soon as the beaker is hot enough.'] if heats else []
+    if any(o[0] == 'cool' for o in res['ops']): notes.append('The cool-down step matters: a beaker that is still hot would react with what you add next in a way the recipe does not want.')
     return {'id': 'chem-%s-%d-%s' % (m.get('type', 'other'), beaker_units, book_slug(name)), 'group': 'chem', 'type': m.get('type', 'other'),
             'title': name, 'tagline': m.get('tag', ''), 'beaker': beaker_units, 'payload': name, 'harm': m.get('harm', 'caution'),
             'what': m.get('what') or (r.description or name).strip(), 'notes': ' '.join(notes), 'caution': m.get('caution', ''),

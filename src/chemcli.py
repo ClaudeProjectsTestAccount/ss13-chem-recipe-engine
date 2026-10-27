@@ -62,7 +62,7 @@ TRIGGERS = {
                   extras=['potassium', 'sugar'], metric='smoke'),
 }
 
-def plan(db, trigger, payload, tier=1, mode='max', min_expo=1.0, top=3, max_grid=40000, heat_speed=0.05, quiet=False,
+def plan(db, trigger, payload, tier=1, mode='max', min_expo=1.0, top=3, max_grid=40000, heat_speed=0.1, quiet=False,
          gear=None, trig_units=None, step=None):
     T = TRIGGERS[trigger]
     gear = gear or planner.Gear()
@@ -214,7 +214,8 @@ def _run(db, ops, tier, reverse, gear=None):
         elif st[0] == 'draw': rig.draw(st[1] if len(st) > 1 else None)
         elif st[0] == 'spill': rig.spill()
         elif st[0] == 'add': rig.add(st[1], st[2], st[3] if len(st) > 3 else None)
-        elif st[0] == 'heat': rig.heat(st[1], st[2] if len(st) > 2 else 0.05)
+        elif st[0] == 'heat': rig.heat(st[1], st[2] if len(st) > 2 else None)
+        elif st[0] == 'cool': rig.cool(st[1])
         elif st[0] == 'inject': rig.inject()
     return rig
 
@@ -234,7 +235,16 @@ def verify_orders(db, ops, tier, gear=None):
     try: small = signature(_run(db, ops, tier, False, gear))
     except Exception: small = None
     finally: planner.CLICKS_BIGGEST_FIRST = True
-    report = {'reverse_index_order_same': signature(rev) == sig, 'clicks_order_same': small == sig, 'perm_total': 0, 'perm_same': 0, 'bad_orders': []}
+    # temperature drift: the beaker after a heater step is never exactly the simulated value (HEAT_SLACK under the target ... exactly the target, minus dilution by cold chems)
+    temp_ok = True
+    if any(o[0] in ('heat', 'cool') for o in ops):
+        try:
+            for d in (-planner.HEAT_SLACK, planner.HEAT_TEST_DROP):
+                planner.HEAT_DROP = d
+                if signature(_run(db, ops, tier, False, gear)) != sig: temp_ok = False
+        except Exception: temp_ok = False
+        finally: planner.HEAT_DROP = 0.0
+    report = {'temp_ok': temp_ok, 'reverse_index_order_same': signature(rev) == sig, 'clicks_order_same': small == sig, 'perm_total': 0, 'perm_same': 0, 'bad_orders': []}
     # segment dispense runs (split at non-dispense ops)
     segs = []; cur = []
     for i, o in enumerate(ops):
@@ -327,6 +337,7 @@ def parse_ops(text):
         elif w[0] == 'add': ops.append(('add', ' '.join(w[1:-1]), float(w[-1])))
         elif w[0] == 'draw': ops.append(('draw', int(w[1]) if len(w) > 1 else None))
         elif w[0] == 'heat': ops.append(('heat', float(w[1])))
+        elif w[0] == 'cool': ops.append(('cool', float(w[1])))
         else: ops.append((w[0],))
     return ops
 
@@ -405,7 +416,8 @@ def chem_cmd(args):
             ws = [w for w in res['rig'].sim.warnings]
             sp = chemplan.make_spec(db, p, bs, res, meta); specs.append(sp)
             print('%-20s %3du: %5.1fu from %du raw  %s%s' % (n, bs, res['made'], sum(o[2] for o in res['ops'] if o[0] == 'dispense'),
-                  '; '.join(('%s %s' % (o[1], o[2])) if o[0] == 'dispense' else 'heat %g' % o[1] for o in res['ops']), ('  WARN ' + '; '.join(ws)) if ws else ''))
+                  '; '.join(('%s %s' % (o[1], o[2])) if o[0] == 'dispense' else '%s %g' % (o[0], o[1]) for o in res['ops']), ('  WARN ' + '; '.join(ws)) if ws else '') + ('  TEMPERATURE-FRAGILE (not filed)' if res.get('fragile') else ''))
+            if res.get('fragile'): continue
     if args.publish and specs:
         recipes = book.load_book() if os.path.exists(book.BOOK_PATH) else []
         ids = {s['id'] for s in specs}; recipes = [r for r in recipes if r['id'] not in ids]; ok = 0

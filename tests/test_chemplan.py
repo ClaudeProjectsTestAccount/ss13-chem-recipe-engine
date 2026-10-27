@@ -74,3 +74,31 @@ class MetaAndBook(unittest.TestCase):
         with self.assertRaises(ValueError): book.add_recipe(spec, db=self.db, write=False)
 
 if __name__ == '__main__': unittest.main()
+
+
+class TestHeaterAndTemperature(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import planner, chemlib
+        cls.planner = planner; cls.db = chemlib.DB(json_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src', 'chemdata.json'))
+
+    def test_heater_waits_until_5k_under_target(self):
+        rig = self.planner.run(self.db, [('dispense', 'welding fuel', 15), ('dispense', 'carbon', 15), ('dispense', 'hydrogen', 15), ('heat', 500)], gear=self.planner.Gear(100))
+        self.assertGreaterEqual(rig.beaker.temp, 495); self.assertLess(rig.beaker.temp, 500)
+        self.assertIn('wait until it reads at least 495K', rig.steps[-1]['text'])
+
+    def test_cool_step_lowers_temperature(self):
+        rig = self.planner.run(self.db, [('dispense', 'welding fuel', 15), ('dispense', 'carbon', 15), ('dispense', 'hydrogen', 15), ('heat', 500), ('cool', 340)], gear=self.planner.Gear(100))
+        self.assertLessEqual(rig.beaker.temp, 340); self.assertIn('340K or lower', rig.steps[-1]['text'])
+
+    def test_multiver_heats_last_and_is_temperature_robust(self):
+        res = chemplan.plan(self.db, self.db.find_reagent('multiver'), 100)
+        self.assertFalse(res['fragile']); self.assertEqual(res['ops'][-1][0], 'heat')
+        self.assertAlmostEqual(res['made'], 90, delta=1)
+
+    def test_hot_then_cold_chems_is_flagged(self):
+        g = self.planner.Gear(100)
+        ops = [['dispense', 'Welding Fuel', 15], ['dispense', 'Carbon', 15], ['dispense', 'Hydrogen', 15], ['heat', 500], ['dispense', 'Sodium', 25], ['dispense', 'Chlorine', 25]]
+        self.assertFalse(chemplan.temp_robust(self.db, ops, g, self.db.find_reagent('multiver'), 90))
+        fixed, fragile = chemplan.robustify(self.db, ops, g, self.db.find_reagent('multiver'), 90)
+        self.assertFalse(fragile); self.assertTrue(chemplan.temp_robust(self.db, fixed, g, self.db.find_reagent('multiver'), 90))

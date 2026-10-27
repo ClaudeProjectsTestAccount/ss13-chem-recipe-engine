@@ -112,11 +112,11 @@ def needs_of(e, gear):
     if group_of(e) == 'chem':
         n.append('chem dispenser (basic reagent list)')
         n.append('%du %s' % (e['beaker'], 'beaker' if e['beaker'] == 50 else 'large beaker' if e['beaker'] == 100 else 'bluespace beaker'))
-        if any(o[0] == 'heat' for o in e['ops']): n.append('chem heater')
+        if any(o[0] in ('heat', 'cool') for o in e['ops']): n.append('chem heater')
         return n
     if e['beaker']: n.append('%du beaker (%s)' % (e['beaker'], 'borg default' if e['beaker'] == 100 else gear.bname))
     if uses_syringe(e['ops']) and e['syringe'] != 15: n.append('%du syringe (bluespace syringe upgrade)' % e['syringe'])
-    if any(o[0] == 'heat' for o in e['ops']): n.append('chem heater')
+    if any(o[0] in ('heat', 'cool') for o in e['ops']): n.append('chem heater')
     for o in e['ops']:
         if o[0] == 'add': n.append('outside supply: %gu %s' % (o[2], o[1]))
     return n
@@ -178,7 +178,7 @@ def simulate(db, e):
     for st in steps:
         if not uses_syringe(ops): st['s'] = None
     return {'steps': steps, 'results': result_lines(db, rig, e.get('payload')),
-            'order': {'same': v['perm_same'], 'total': v['perm_total'], 'bad': v['bad_orders'][:2], 'reverse_ok': v['reverse_index_order_same'], 'clicks_ok': v['clicks_order_same']},
+            'order': {'same': v['perm_same'], 'total': v['perm_total'], 'bad': v['bad_orders'][:2], 'reverse_ok': v['reverse_index_order_same'], 'clicks_ok': v['clicks_order_same'], 'temp_ok': v.get('temp_ok', True)},
             'summary': summ, 'needs': needs_of(e, gear), 'warnings': rig.sim.warnings, 'syringes': syringes_of(e, db, chemcli.signature(rig))}
 
 def dose_line(db, p):
@@ -209,7 +209,7 @@ def simulate_chem(db, e, gear, ops, rig):
     steps = tidy.display_steps(rig, gear)
     for st in steps: st['s'] = None
     return {'steps': steps, 'results': res,
-            'order': {'same': v['perm_same'], 'total': v['perm_total'], 'bad': v['bad_orders'][:2], 'reverse_ok': v['reverse_index_order_same'], 'clicks_ok': v['clicks_order_same']},
+            'order': {'same': v['perm_same'], 'total': v['perm_total'], 'bad': v['bad_orders'][:2], 'reverse_ok': v['reverse_index_order_same'], 'clicks_ok': v['clicks_order_same'], 'temp_ok': v.get('temp_ok', True)},
             'summary': summ, 'needs': needs_of(e, gear), 'warnings': rig.sim.warnings, 'syringes': []}
 
 def computed(db, e, cache=None):
@@ -268,6 +268,9 @@ def add_recipe(spec, db=None, write=True):
     if group_of(e) != 'chem' and (not o.get('clicks_ok', True) or not o.get('reverse_ok', True)):
         raise ValueError('the result depends on the click order inside a dispenser step (%s) or on which of two same-ingredient reactions the game tries first (%s): '
                          'rebalance the amounts (e.g. keep every split click a multiple of the reaction ratio)' % ('click order' if not o.get('clicks_ok', True) else 'ok', 'reaction priority' if not o.get('reverse_ok', True) else 'ok'))
+    if not o.get('temp_ok', True):
+        raise ValueError('the result changes if the beaker is a few K hotter or colder after a heater step (the heater never quite reaches its target, cold chemicals dilute the heat): '
+                         'heat last, or add a cool-down step (cool <K>) before the next chemical')
     recipes = [r for r in load_book() if r['id'] != e['id']] if os.path.exists(BOOK_PATH) else []
     replaced = len(recipes) != (len(load_book()) if os.path.exists(BOOK_PATH) else 0)
     recipes.append(e)

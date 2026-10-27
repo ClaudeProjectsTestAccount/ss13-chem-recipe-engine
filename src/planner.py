@@ -8,6 +8,11 @@ import chemlib
 from chemlib import Sim, Holder, DB
 
 CLICKS_BIGGEST_FIRST = True        # order the clicks of one dispense step (the step text lists the biggest first); chemcli.verify_orders also tries the other way
+HEATER_COEFF = 0.1     # chem_heater.dm RefreshParts: heater_coefficient = 0.1 * micro_laser tier (stock = tier 1)
+HEATER_TICK = 2.0      # machines process every 2 s
+HEAT_SLACK = 5         # the player waits until the beaker reads this far under the target (it never reaches it)
+HEAT_TEST_DROP = 30   # a recipe must still work with the beaker this many K colder than simulated after a heater step
+HEAT_DROP = 0.0        # robustness knob: beaker this many K colder after every heater step
 DISP_AMOUNTS = [100, 50, 30, 25, 20, 15, 10, 5]   # chem dispenser click sizes (independent of the borg's beaker)
 
 # ---- gear tables, read from the Monkestation source (reagent_containers/cups/_cup.dm, bottle.dm, syringes.dm)
@@ -170,29 +175,46 @@ class Rig:
         self._snap('Beaker: spill/empty the rest', notes=['discarded: ' + left],
                    parts=[('t', 'Beaker: '), ('x', 'SPILL / EMPTY'), ('t', ' the rest')])
 
-    def heat(self, kelvin, coeff=0.05):
-        """chem_heater.dm process(): each tick adjust_thermal_energy((target-T)*coeff*dt*SH*volume) then handle_reactions().
-        That is dT = (target-T)*coeff*dt.  Step dt=1s; report when the first reaction fires and when target is reached."""
-        b = self.beaker; t = 0; fired = None
-        while abs(kelvin - b.temp) > 0.5 and t < 900:
-            hc = b.heat_capacity()      # chem_heater: adjust_thermal_energy(dT * coeff * dt * SPECIFIC_HEAT_DEFAULT * volume) -> dT = J / heat capacity
-            if hc: b.temp += (kelvin - b.temp) * coeff * 1.0 * chemlib.SH_DEFAULT * b.total / hc
-            t += 1
+    def heat(self, kelvin, coeff=None):
+        """chem_heater.dm process(): every machine tick (2 s) adjust_thermal_energy((target-T) * coeff * seconds_per_tick * SH * volume) then handle_reactions(),
+        i.e. dT = (target-T) * coeff * 2 s.  coeff = 0.1 x micro-laser tier (RefreshParts; stock part = tier 1).  The beaker only approaches the target and
+        never reaches it, so the step tells the player to wait until the display reads HEAT_SLACK K under the target, and that is the temperature simulated."""
+        coeff = HEATER_COEFF if coeff is None else coeff
+        b = self.beaker; t = 0.0; fired = None
+        floor = kelvin - HEAT_SLACK
+        while b.temp < floor and t < 1800:
+            hc = b.heat_capacity()
+            if hc: b.temp += (kelvin - b.temp) * coeff * HEATER_TICK * chemlib.SH_DEFAULT * b.total / hc
+            t += HEATER_TICK
             n = len(self.sim.log)
             b.handle_reactions()
             if fired is None and len(self.sim.log) > n:
-                fired = (t, round(b.temp))
-        # the temperature only approaches the target (it never lands exactly on it), so a reaction that needs
-        # exactly the target (or a hair below it) never fires: say so instead of snapping to the target
+                fired = (round(t), round(b.temp))
         for rx in getattr(b, 'too_cold', []):
             if rx.required_temp <= kelvin + 1e-9 and b.temp < rx.required_temp:
-                self.sim.warnings.append('%s needs %dK but the heater only approaches %dK (never reaches it): set the heater at least 10K higher' % (rx.short, rx.required_temp, kelvin))
-        msg = 'Heater: set target %dK, put the beaker in' % kelvin
-        parts = [('t', 'Heater: set target '), ('u', '%dK' % kelvin), ('t', ', put the beaker in')]
+                self.sim.warnings.append('%s needs %dK but the beaker only reaches about %dK before you take it out: set the heater higher' % (rx.short, rx.required_temp, b.temp))
+        reads = int(floor)
+        msg = 'Heater: set target %dK, put the beaker in and wait until it reads at least %dK (about %ds)' % (kelvin, reads, round(t))
+        parts = [('t', 'Heater: set target '), ('u', '%dK' % kelvin), ('t', ', put the beaker in and wait until it reads at least '), ('u', '%dK' % reads), ('n', '(about %ds)' % round(t))]
         if fired:
-            tail = ' - the reaction fires after ~%ds (beaker ~%dK); you can take it out then' % fired
+            tail = ' - the first reaction fires at ~%dK' % fired[1]
             msg += tail; parts.append(('t', tail))
-        msg += ' [heater speed %.2f]' % coeff
+        b.temp -= HEAT_DROP          # robustness test: pretend the beaker is this much colder when you carry on (chemcli.verify_orders)
+        self._snap(msg, parts=parts)
+
+    def cool(self, kelvin, coeff=None):
+        """cool the beaker down: the chem heater pulls the beaker toward its target in BOTH directions (same formula as heat()), so set the target low and wait
+        until the display reads at most `kelvin` (a hot beaker mixes into everything you add next and can set off reactions you never wanted).
+        Cooler target = 300 K or 20 K under the wanted threshold, whichever is lower."""
+        coeff = HEATER_COEFF if coeff is None else coeff
+        b = self.beaker; t = 0.0
+        target = min(300, kelvin - 20)
+        while b.temp > kelvin and t < 1800:
+            hc = b.heat_capacity()
+            if hc: b.temp += (target - b.temp) * coeff * HEATER_TICK * chemlib.SH_DEFAULT * b.total / hc
+            t += HEATER_TICK
+        msg = 'Cool down: set heater target %dK, put the beaker in and wait until it reads %dK or lower (about %ds)' % (target, kelvin, round(t))
+        parts = [('t', 'Cool down: set heater target '), ('u', '%dK' % target), ('t', ', put the beaker in and wait until it reads '), ('u', '%dK' % kelvin), ('t', ' or lower'), ('n', '(about %ds)' % round(t))]
         self._snap(msg, parts=parts)
 
     def swap(self):
@@ -237,7 +259,8 @@ def run(db, proc, tier=1, reverse=False, gear=None):
         elif op == 'swap': rig.swap()
         elif op == 'spill': rig.spill()
         elif op == 'add': rig.add(st[1], st[2], st[3] if len(st) > 3 else None)
-        elif op == 'heat': rig.heat(st[1])
+        elif op == 'heat': rig.heat(st[1], st[2] if len(st) > 2 else None)
+        elif op == 'cool': rig.cool(st[1])
         elif op == 'inject': rig.inject()
         else: raise ValueError(op)
     return rig
