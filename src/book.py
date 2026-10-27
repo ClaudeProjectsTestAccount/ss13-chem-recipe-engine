@@ -219,7 +219,7 @@ def simulate_chem(db, e, gear, ops, rig):
             'summary': summ, 'needs': needs_of(e, gear), 'warnings': rig.sim.warnings, 'syringes': [], 'stats': statspanel.build(db, e, rig)}
 
 def computed(db, e, cache=None):
-    key = hashlib.sha1((json.dumps([e['ops'], e['beaker'], e.get('syringe'), e.get('payload'), e.get('mix')]) + _engine_hash()).encode()).hexdigest()
+    key = hashlib.sha1((json.dumps([e['ops'], e['beaker'], e.get('syringe'), e.get('payload'), e.get('mix'), e.get('lube_ok')]) + _engine_hash()).encode()).hexdigest()
     if cache is not None and key in cache: return cache[key]
     out = simulate(db, e)
     if cache is not None: cache[key] = out
@@ -262,6 +262,15 @@ def broken_recipes(recipes=None, db=None):
     for e in (recipes if recipes is not None else load_book()):
         st = computed(db, e, cache).get('stats') or {}
         if st.get('broken'): out.append((e['id'], ['%s %gu' % (i['n'], i['u']) for i in st['exp']['inert']]))
+    return out
+
+def flagged_recipes(recipes=None, db=None):
+    """[(id, text)] for recipes flagged by the lube-duration rule and not marked intended"""
+    db = db or chemlib.DB(json_path=os.path.join(HERE, 'chemdata.json')); cache = _load_cache(); out = []
+    for e in (recipes if recipes is not None else load_book()):
+        st = computed(db, e, cache).get('stats') or {}
+        for f in st.get('flags') or []:
+            if not f['ok']: out.append((e['id'], f['text']))
     return out
 
 def write_page(**kw):

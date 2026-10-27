@@ -1,0 +1,5 @@
+{
+ "_readme": "Targets the recipe checker holds foam / smoke recipes to. A recipe that goes over is FLAGGED (shown on the card and listed by 'book rebuild'), never refused. A recipe can set lube_ok: true when a long lube is intended.",
+ "slick_max_s": 15,
+ "slick_note": "Hellfoam effects play out in 10-15 s; a floor that stays slick much longer only gets in the way."
+}

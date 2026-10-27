@@ -47,4 +47,30 @@ class TestInert(unittest.TestCase):
         names = [i['n'] for i in sp.inert_chems(rep)]
         self.assertIn('Oil', names); self.assertNotIn('Space Lube', names)
 
+class TestSlick(unittest.TestCase):
+    L = '/datum/reagent/lube'; D = '/datum/reagent/drying_agent'
+    def test_below_threshold_not_slick(self):
+        self.assertIsNone(ta.slick_report('foam', 20, {self.L: 39.0}))
+
+    def test_threshold_foam_still_long(self):
+        r = ta.slick_report('foam', 20, {self.L: 40.1})
+        self.assertTrue(r['over']); self.assertGreater(r['sim']['total_s'], 100)            # 40 exposures x 2 s: the floor cannot be short
+        self.assertAlmostEqual(r['chems'][0]['extra_tile'], 0.1, places=1)
+
+    def test_more_lube_lasts_longer(self):
+        a = ta.slick_sim('foam', 20, {self.L: 64.0})['total_s']; b = ta.slick_sim('foam', 20, {self.L: 41.0})['total_s']
+        self.assertGreater(a, b)
+
+    def test_smoke_shorter_than_foam(self):
+        self.assertLess(ta.slick_sim('smoke', 30, {self.L: 12.0})['total_s'], ta.slick_sim('foam', 20, {self.L: 41.0})['total_s'])
+
+    def test_drying_agent_after_lube_cuts_it(self):
+        t = {self.L: 64.0, self.D: 60.0}
+        self.assertLess(ta.slick_sim('foam', 20, t)['total_s'], 15.0)
+        t = {self.D: 60.0, self.L: 64.0}             # drying agent first: the lube then resets the timer each exposure
+        self.assertGreater(ta.slick_sim('foam', 20, t)['total_s'], 22.5)        # still the 15 s minimum (22.5 s of draining) after the last exposure
+
+    def test_policy(self):
+        self.assertEqual(ta.policy()['slick_max_s'], 15)
+
 if __name__ == '__main__': unittest.main()

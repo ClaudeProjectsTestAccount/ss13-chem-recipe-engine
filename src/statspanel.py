@@ -79,8 +79,7 @@ def scenario_row(s, chem_names):
 def _effect_extra(ev):
     """one short sentence with the numbers of a floor effect that fires"""
     if ev.get('model') == 'wet' and ev['fires']:
-        return 'each exposure adds %g s of wet time; %d s stacked when it ends; the floor stays slick about %d s after that (air %d K dries it at %.2g s per s)' % (
-            ev['add_s'], round(ev['wet_left_s']), round(ev['slick_for_s']), round(ev['air_k']), ta.wet_rate(ev['air_k']))
+        return 'adds %g s of wet time per exposure; see the slick-floor panel for how long the whole mix stays slick' % r2(ev['add_s'], 2)
     if ev.get('model') == 'accum' and ev['fires']:
         return 'coat adds up to %g u over the whole life: %s' % (r2(ev['total'], 1), 'enough to melt a floor or wall%s' % (' and a reinforced wall' if ev['enough_rwall'] else ' (not a reinforced wall: needs %g)' % ev['need_rwall']) if ev['enough'] else 'NOT enough: needs %g u in total' % ev['need'])
     if ev.get('model') == 'dry' and ev['fires']:
@@ -131,12 +130,24 @@ def inert_chems(rep):
         out.append(dict(n=c['name'], u=r2(c['tile'], 1), why=why))
     return out
 
+def _fin(v):
+    return None if v is None or v == float('inf') else r2(v, 1)
+
+def slick_block(sr):
+    """JSON-safe slick-floor report (tileapply.slick_report)"""
+    if sr is None: return None
+    sim = sr['sim']
+    return dict(total=_fin(sim['total_s']), after=_fin(sim['after_s']), life=_fin(sim['life_s']), left=_fin(sim['wet_left_s']), target=sr['target_s'], over=sr['over'], shortest=_fin(sr['shortest_s']),
+                dry_fix=_fin(sr['dry_fix_tile_u']), rate=r2(sr['rate'], 3), air_k=round(sim['air_k']), kinds=sim['kinds'],
+                chems=[dict(n=ex_name(c['path']), label=c['label'], u=r2(c['units'], 1), per=r2(c['per_exposure'], 2), thr=c['thr'], thr_tile=_fin(c['thr_tile']), extra=_fin(c['extra_tile']), fires=c['fires'],
+                            add=r2(c['add_s'], 2), cap=c['cap_add_s'], capped=c['capped'], minwet=c['min_wet_s'], solo=_fin(c['solo_total_s']), at_thr=_fin(c['threshold_total_s']), max_u=_fin(c['max_tile_u'])) for c in sr['chems']])
+
 def exposure_block(db, x, air_k=293.15):
     """x = one foam / smoke entry from rig.sim.effects"""
     rep = ex.analyse(x['kind'], x['tile'], x['tiles'], air_k=air_k)
     names = {c['path']: c['name'] for c in rep['chems']}
     chems = [dict(n=c['name'], tile=r2(c['tile'], 1), per=r2(c['per_call'], 2), contact=c['contact'], pen=bool(c['pen'] & ex.VAPOR), od=cs.stats().get(c['path'], {}).get('od')) for c in rep['chems']]
-    return dict(floor=floor_block(rep), inert=inert_chems(rep), kind=rep['kind'], tiles=rep['tiles'], frac=r2(100 * rep['fraction'], 2), calls=rep['calls'], dt=rep['dt'], life=rep['life'], tile_total=r2(rep['tile_total'], 1),
+    return dict(slick=slick_block(ta.slick_report(rep['kind'], rep['tiles'], x['tile'], air_k)), floor=floor_block(rep), inert=inert_chems(rep), kind=rep['kind'], tiles=rep['tiles'], frac=r2(100 * rep['fraction'], 2), calls=rep['calls'], dt=rep['dt'], life=rep['life'], tile_total=r2(rep['tile_total'], 1),
                 chems=chems, rules=RULES[rep['kind']], scenarios=[scenario_row(s, names) for s in rep['scenarios']])
 
 def build(db, e, rig):
@@ -149,6 +160,12 @@ def build(db, e, rig):
         out['mix'] = mix_block(db, x['tile'], 'What each tile of the %s carries (per tile, all at once)' % x['kind'])
         out['exp'] = exposure_block(db, x)
         out['broken'] = bool(out['exp']['inert'])
+        sl = out['exp']['slick']
+        out['flags'] = []
+        if sl and sl['over']:
+            out['flags'].append(dict(id='lube-long', ok=bool(e.get('lube_ok')), text='Floor stays slick about %g s (target %g s or less). %s' % (
+                sl['total'], sl['target'], 'The code gives lube a minimum of %g s of wet time and adds 2 s per unit on EVERY exposure, so the shortest any lube can be in this %s is %g s.' % (max(c['minwet'] for c in sl['chems'] if 'lube' in c['label'].lower() or 'slick' in c['label'].lower()), x['kind'], sl['shortest'])
+                + (' A drying agent mix of about %g u per tile (acting after the lube) would cut it under the target.' % sl['dry_fix'] if sl['dry_fix'] else ''))))
         for r in out['exp']['floor']['rows']:
             for e in r['effs']:
                 if e['fires']: out['mix']['chips'].append(dict(l='Floor: ' + e['l'], c='floor', tip=e['tip'] + ((' ' + e['extra'] + '.') if e['extra'] else ''), by=[r['n']]))
@@ -187,6 +204,14 @@ def exp_text(x):
     fl = x['floor']; L.append('  FLOOR (per exposure = tile x %g%%, %d exposures):' % (fl['frac'], fl['exposures']))
     for r in fl['rows']:
         L.append('   %-22s tile %6gu  per exposure %6gu  life %6gu  ' % (r['n'], r['tile'], r['per'], r['total']) + ('; '.join(('OK ' if e['fires'] else 'NO ') + e['l'] + ('' if e['fires'] else ' (needs %gu per exposure = %gu per tile)' % (e['thr'], e['need_tile'])) + ((' [' + e['extra'] + ']') if e['extra'] else '') for e in r['effs']) or 'nothing on the floor'))
+    sl = x.get('slick')
+    if sl:
+        L.append('  SLICK FLOOR: slick about %s s from the first exposure (%s s of that after the last exposure, %s s of wet time stacked); target %g s -> %s; shortest possible here %s s; air %d K drains %s s of wet time per s' % (
+            sl['total'], sl['after'], sl['left'], sl['target'], 'OVER' if sl['over'] else 'ok', sl['shortest'], sl['air_k'], sl['rate']))
+        for c in sl['chems']:
+            L.append('    %s: %gu per tile now, threshold %gu per tile (%gu per exposure), extra over threshold %s u per tile; adds %g s per exposure%s; alone %s s, at threshold %s s%s' % (
+                c['n'], c['u'], c['thr_tile'], c['thr'], c['extra'], c['add'], ' (capped at %g)' % c['cap'] if c['capped'] else '', c['solo'], c['at_thr'], ('; largest amount that meets the target %s u per tile' % c['max_u']) if c['max_u'] else ''))
+        if sl['dry_fix']: L.append('    drying agent fix: about %g u of drying agent per tile (placed after the lube in the tile) brings it under the target' % sl['dry_fix'])
     if x['inert']: L.append('  BROKEN - wasted chemicals: ' + '; '.join('%s %gu (%s)' % (i['n'], i['u'], i['why']) for i in x['inert']))
     L.append('  Rules:'); L += ['   - ' + r for r in x['rules']]
     for s in x['scenarios']:

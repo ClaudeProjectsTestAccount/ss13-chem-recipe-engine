@@ -357,6 +357,10 @@ def book_cmd(args):
     if args.cmd == 'book':
         if args.action == 'rebuild':
             print('wrote', book.write_page(use_cache=True))
+            fl = book.flagged_recipes()
+            if fl:
+                print('FLAGGED recipes (floor stays slick too long): %d' % len(fl))
+                for rid, txt in fl: print('  %-30s %s' % (rid, txt.split('.')[0]))
             bad = book.broken_recipes()
             if bad:
                 print('BROKEN recipes (chemicals taking up space that do nothing): %d' % len(bad))
@@ -375,6 +379,8 @@ def book_cmd(args):
         v = getattr(args, k)
         if v is not None and (k not in spec or v not in ('', 50)): spec[k] = v
     if args.ops: spec['ops'] = [list(o) for o in parse_ops(args.ops)]
+    if args.lube_ok: spec['lube_ok'] = True
+    if args.allow_waste: spec['allow_waste'] = True
     if spec.get('syringe') is None: spec.pop('syringe', None)
     try:
         e, comp, replaced = book.add_recipe(spec, write=False)
@@ -392,6 +398,7 @@ def book_cmd(args):
           'any order works' if comp['order']['same'] == comp['order']['total'] else 'ORDER MATTERS (%d of %d)' % (comp['order']['same'], comp['order']['total'])))
     for l in comp['results']: print('  ' + l)
     for w in comp['warnings']: print('  engine note:', w)
+    for f in (comp.get('stats') or {}).get('flags', []): print('  %s: %s' % ('INTENDED' if f['ok'] else 'ERROR (flagged, not blocked)', f['text']))
     print('  wrote docs/index.html; commit data/recipe_book.json + docs/index.html')
 
 def chem_cmd(args):
@@ -438,6 +445,35 @@ def _nodes(t):
     yield t
     for c in t.children.values():
         if c is not None: yield from _nodes(c)
+
+def scale_cmd(args):
+    import book, scale
+    db = DB(); recipes = book.load_book(); done = []
+    by = {r['id']: r for r in recipes}
+    for spec_id in args.ids:
+        rid, _, want_id = spec_id.partition('=')
+        e = by.get(rid)
+        if e is None: print('no such recipe', rid); continue
+        try: s, comp, f, held = scale.scale_recipe(db, e, args.beaker, new_id=want_id or None, verbose=args.verbose)
+        except ValueError as ex: print('%s: %s' % (rid, ex)); continue
+        if s['id'] in by and by[s['id']].get('scaled_from') != rid: s['id'] += '-scaled'
+        s['scaled_from'] = rid
+        s['title'] = e['title'] + ' - %du beaker' % args.beaker
+        s['tagline'] = '%du beaker version, payload x%.1f%s' % (args.beaker, f, ' (lube kept at the original amount)' if held else '')
+        s['what'] = scale.describe(s, comp, f, e['title']) + (' The ingredients of the space lube (%s) were NOT scaled: more lube only makes the floor stay slick longer.' % ', '.join(held) if held else '')
+        import re
+        s['notes'] = ' '.join(x for x in re.split(r'(?<=\.) ', e.get('notes') or '') if x and not x.startswith('Fill:') and not re.search(r'\b\d+(\.\d+)?u\b', x)).strip()
+        s['rank'] = e.get('rank', 50) + 1
+        print('%-34s -> %-34s x%.1f  %s' % (rid, s['id'], f, ', '.join('%s=%s' % kv for kv in comp['summary'].items())))
+        for fl in (comp.get('stats') or {}).get('flags', []): print('     FLAG: ' + fl['text'][:160])
+        done.append(s)
+    if args.publish and done:
+        ids = {s['id'] for s in done}
+        keep = [r for r in recipes if r['id'] not in ids]
+        for s in done:
+            e2, comp, rep = book.add_recipe(s, write=False); keep.append(e2)
+        book.save_book(keep); book.write_page(recipes=keep); print('published', len(done))
+    return 0
 
 def tile_cmd(args):
     import statspanel, tileapply
@@ -493,6 +529,8 @@ def main(argv=None):
     a.add_argument('--ops', help='step list, e.g. "dispense water 30; draw 15; spill; heat 400; inject"'); a.add_argument('--payload')
     a.add_argument('--harm', default='caution'); a.add_argument('--what'); a.add_argument('--notes', default=''); a.add_argument('--caution', default='')
     a.add_argument('--src', default=''); a.add_argument('--rank', type=int, default=50, help='sort position inside its type group (lower = earlier)')
+    a.add_argument('--lube-ok', action='store_true', help='a long-lasting slick floor is intended: do not flag it')
+    a.add_argument('--allow-waste', action='store_true', help='file the recipe although some payload chemicals do nothing')
     a.add_argument('--allow-warnings', action='store_true', help='accept engine warnings (e.g. a deliberate clamped dispenser click)')
     a = sub.add_parser('chems', help='list every chemical the basic dispenser can make alone'); a.add_argument('--labelled', action='store_true')
     a = sub.add_parser('make', help='plan plain chemicals (no foam) from the dispenser; --publish files them in the book')
@@ -506,7 +544,10 @@ def main(argv=None):
     a = sub.add_parser('tile', help='amount applied per floor tile: foam/smoke size + tile contents -> per exposure, floor effects, wasted chemicals')
     a.add_argument('kind', choices=['foam', 'smoke']); a.add_argument('tiles', type=int, help='foam / smoke area in tiles')
     a.add_argument('mix', help='contents of ONE tile: "lube 64, thermite 40"'); a.add_argument('--air', type=float, default=293.15, help='air temperature in K (wet floors dry faster when hot)')
+    a = sub.add_parser('scale', help='make the bigger-beaker version of existing nade recipes (keeps the trigger, scales the payload)')
+    a.add_argument('ids', nargs='+'); a.add_argument('--beaker', type=int, default=300); a.add_argument('--publish', action='store_true'); a.add_argument('-v', '--verbose', action='store_true')
     args = ap.parse_args(argv)
+    if args.cmd == 'scale': return scale_cmd(args)
     if args.cmd == 'tile': return tile_cmd(args)
     if args.cmd in ('mix', 'stats'): return stats_cmd(args)
     if args.cmd in ('publish', 'book'): return book_cmd(args)
