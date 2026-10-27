@@ -4,6 +4,7 @@ smoke, what a person standing in it actually absorbs under each kind of protecti
 """
 import chemstats as cs
 import exposure as ex
+import tileapply as ta
 
 KIND_LABEL = {'brute': 'Brute', 'burn': 'Burn', 'tox': 'Toxin', 'oxy': 'Oxygen', 'clone': 'Clone', 'stamina': 'Stamina'}
 
@@ -42,6 +43,7 @@ def mix_block(db, mix, title):
 
 RULES = {
  'foam': [
+   'FLOOR effects (slippery, thermite, glow, cleaning...) need a minimum amount of the chemical in ONE exposure, listed per chemical in the floor table. The tile contents multiply by the exposure share to get it.',
    'Foam spreads over up to the stated number of tiles and lasts about 8 s per tile. Heat above 475 K dissolves it early; every extra person standing in the same tile cuts that tile\'s life further.',
    'Each foam tick (every 0.2 s) EVERY chemical in the tile is exposed to everyone in the tile by VAPOR: 40 exposures over the 8 s.',
    'Each exposure is (tile units) x 0.2 x 25 / (8 x the larger of 25 and the foam area). Up to 25 tiles that is 2.5% of the tile contents per exposure (about 100% over 8 s); a bigger foam dilutes it in proportion.',
@@ -52,6 +54,7 @@ RULES = {
    'Foam does not need a working lung: it works through the skin. Borgs and AIs have no bloodstream, so nothing is absorbed, but contact effects still land.',
  ],
  'smoke': [
+   'FLOOR effects (slippery, thermite, glow, cleaning...) need a minimum amount of the chemical in ONE exposure (10% of the tile per tick): see the floor table.',
    'Chemical smoke covers up to the stated number of tiles through any open path (closed doors stop it) and lasts 20 s per tile.',
    'Every 2 s each person who is breathing in the smoke gets 10% of every chemical in the tile copied straight into the blood: 10 breaths (9 ticks plus one when it first reaches you) = about 100% of the tile contents. No armour roll and no minimum.',
    'You are NOT affected if: an internals tank is open (mask or helmet), you do not breathe (TRAIT_NOBREATH), or your mask, glasses or hat has the gas-smoke-blocking flag (gas masks, sec hailers, bio hoods, firefighter helmets...). Space helmets and hardsuits do not block it unless internals are on. Armour makes no difference.',
@@ -63,7 +66,7 @@ def scenario_row(s, chem_names):
     num = s['num']; fx = s['contact']; b = s['blood']
     row = dict(id=s['sc']['id'], name=s['sc']['name'], note=s['sc']['note'], block=r2(100 * num['block'], 0), breathes=not num['smoke_block'], absorbed=r2(s['absorbed_total'], 1),
                per={chem_names.get(p, p): v for p, v in s['absorbed'].items() if v > 0}, fire_cover=r2(100 * num['fire_cover'], 0))
-    row['fx'] = {k: r2(v) for k, v in dict(fire=fx['fire_stacks'], burn=fx['burn_flat'], brute=fx['brute_flat'], slip=fx['slip_s'], acid_brute=fx['acid'][0], acid_burn=fx['acid'][1], acid_borg=fx['acid_borg'], mutate=fx['mutate']).items() if abs(v) > 1e-9}
+    row['fx'] = {k: r2(v) for k, v in dict(fire=fx['fire_stacks'], burn=fx['burn_flat'], brute=fx['brute_flat'], acid_brute=fx['acid'][0], acid_burn=fx['acid'][1], acid_borg=fx['acid_borg'], mutate=fx['mutate']).items() if abs(v) > 1e-9}
     if fx['ignite']: row['fx']['ignite'] = 1
     if fx['clean']: row['fx']['clean'] = 1
     if fx['extinguish']: row['fx']['extinguish'] = 1
@@ -73,23 +76,82 @@ def scenario_row(s, chem_names):
                             tags=[dict(l=k[0], c=k[1], by=sorted(v)) for k, v in b['tags'].items()], secs=b['duration_ticks'] * 2)
     return row
 
-def exposure_block(db, x):
+def _effect_extra(ev):
+    """one short sentence with the numbers of a floor effect that fires"""
+    if ev.get('model') == 'wet' and ev['fires']:
+        return 'each exposure adds %g s of wet time; %d s stacked when it ends; the floor stays slick about %d s after that (air %d K dries it at %.2g s per s)' % (
+            ev['add_s'], round(ev['wet_left_s']), round(ev['slick_for_s']), round(ev['air_k']), ta.wet_rate(ev['air_k']))
+    if ev.get('model') == 'accum' and ev['fires']:
+        return 'coat adds up to %g u over the whole life: %s' % (r2(ev['total'], 1), 'enough to melt a floor or wall%s' % (' and a reinforced wall' if ev['enough_rwall'] else ' (not a reinforced wall: needs %g)' % ev['need_rwall']) if ev['enough'] else 'NOT enough: needs %g u in total' % ev['need'])
+    if ev.get('model') == 'dry' and ev['fires']:
+        return 'removes %g s of wet time per exposure' % r2(ev['dry_s'], 1)
+    return ''
+
+def floor_block(rep):
+    """floor effects per chemical for a foam / smoke exposure report (tileapply numbers)"""
+    fl = rep['floor']; pl = fl['plan']; rows = []
+    for r in fl['rows']:
+        effs = []
+        for ev in r['effects']:
+            e = dict(l=ev['label'], fires=ev['fires'], thr=ev['thr'], tip=ev['tip'], extra=_effect_extra(ev))
+            if not ev['fires'] and ev['thr']: e['need_tile'] = r2(ev['thr'] / pl['fraction'], 1)
+            effs.append(e)
+        rows.append(dict(n=ex_name(r['path']), tile=r2(r['tile'], 1), per=r2(r['per_exposure'], 2), total=r2(r['total'], 1), effs=effs))
+    return dict(rows=rows, exposures=pl['exposures'], frac=r2(100 * pl['fraction'], 2), per_s=r2(1.0 / pl['dt'], 1))
+
+def ex_name(path): return cs.stats().get(path, {}).get('name') or path.split('/')[-1]
+
+def _has_blood_effect(pr):
+    if pr is None: return False
+    t = pr['tick']
+    return bool(any(abs(v) > 1e-9 for v in t['always'].values()) or t['crit'] or t['sometimes'] or t['timed'] or pr['organ'] or pr['tags'] or pr['buffs'] or pr['status']
+                or any(abs(v) > 1e-9 for v in pr['od_tick']['always'].values()) or pr['od_organ'])
+
+def inert_chems(rep):
+    """chemicals in the tile that do nothing to anything: no floor effect, no contact effect on a person, nothing absorbed that has an effect in the blood"""
+    out = []; bare = rep['scenarios'][0]; sc = bare['sc']
+    floor = {r['path']: r for r in rep['floor']['rows']}
+    for c in rep['chems']:
+        p = c['path']; fr = floor[p]
+        if fr['floor_active']: continue
+        methods = ex.VAPOR if rep['kind'] == 'foam' else (ex.TOUCH | ex.INGEST)
+        cx = ex.contact(p, methods, c['per_call'], sc)
+        if any(cx.get(k) for k in ('fire_stacks', 'ignite', 'burn_flat', 'brute_flat', 'clean', 'extinguish', 'mutate_p', 'acid_part', 'acid_borg')): continue
+        if bare['absorbed'].get(p, 0) > 0 and _has_blood_effect(cs.profile(p)): continue
+        unmet = [e for e in fr['effects'] if not e['fires'] and e['thr']]
+        if unmet:
+            e = unmet[0]
+            why = '%s needs %g u in ONE exposure but each exposure carries only %.2g u (the tile would need %.0f u)' % (e['label'], e['thr'], c['per_call'], e['thr'] / rep['fraction'])
+        elif bare['absorbed'].get(p, 0) <= 0 and c['pen'] & ex.VAPOR and rep['kind'] == 'foam':
+            why = 'each exposure is %.2g u, under the 0.5 u minimum the skin absorbs, so none gets in; it has no floor effect' % c['per_call']
+        elif not (c['pen'] & (ex.VAPOR if rep['kind'] == 'foam' else ex.INGEST)) and rep['kind'] == 'foam':
+            why = 'does not pass through skin and has no floor or contact effect'
+        else:
+            why = 'no floor effect, no contact effect, and nothing it does once absorbed'
+        out.append(dict(n=c['name'], u=r2(c['tile'], 1), why=why))
+    return out
+
+def exposure_block(db, x, air_k=293.15):
     """x = one foam / smoke entry from rig.sim.effects"""
-    rep = ex.analyse(x['kind'], x['tile'], x['tiles'])
+    rep = ex.analyse(x['kind'], x['tile'], x['tiles'], air_k=air_k)
     names = {c['path']: c['name'] for c in rep['chems']}
     chems = [dict(n=c['name'], tile=r2(c['tile'], 1), per=r2(c['per_call'], 2), contact=c['contact'], pen=bool(c['pen'] & ex.VAPOR), od=cs.stats().get(c['path'], {}).get('od')) for c in rep['chems']]
-    return dict(kind=rep['kind'], tiles=rep['tiles'], frac=r2(100 * rep['fraction'], 2), calls=rep['calls'], dt=rep['dt'], life=rep['life'], tile_total=r2(rep['tile_total'], 1),
+    return dict(floor=floor_block(rep), inert=inert_chems(rep), kind=rep['kind'], tiles=rep['tiles'], frac=r2(100 * rep['fraction'], 2), calls=rep['calls'], dt=rep['dt'], life=rep['life'], tile_total=r2(rep['tile_total'], 1),
                 chems=chems, rules=RULES[rep['kind']], scenarios=[scenario_row(s, names) for s in rep['scenarios']])
 
 def build(db, e, rig):
     """-> dict for the page, or None when there is nothing to show.  Foam / smoke: the tile mix plus the exposure table.
     Plain chemical recipes: only when the recipe lists a `mix` (name -> units) it is meant to be used as."""
     out = {}
-    fx = [x for x in rig.sim.effects if x['kind'] in ('foam', 'smoke') and sum(x['tile'].values()) > 0.05]
+    fx = [x for x in rig.sim.effects if x['kind'] in ('foam', 'smoke') and sum(x['tile'].values()) > 0.05 and x.get('type', 'foam') in ('foam', 'smoke')]    # metal / iron / smart foam: the foam itself is the effect, the tile chemicals are only its ingredients
     if fx:
         x = fx[0]
         out['mix'] = mix_block(db, x['tile'], 'What each tile of the %s carries (per tile, all at once)' % x['kind'])
         out['exp'] = exposure_block(db, x)
+        out['broken'] = bool(out['exp']['inert'])
+        for r in out['exp']['floor']['rows']:
+            for e in r['effs']:
+                if e['fires']: out['mix']['chips'].append(dict(l='Floor: ' + e['l'], c='floor', tip=e['tip'] + ((' ' + e['extra'] + '.') if e['extra'] else ''), by=[r['n']]))
     elif e.get('mix'):
         mix = {}
         for n, u in e['mix'].items():
@@ -122,13 +184,17 @@ def exp_text(x):
     foam = x['kind'] == 'foam'
     L = ['%s: %d tiles, ~%g s, %g%% of the tile per %g s tick x %d = about %d%% of the tile over its life (tile holds %gu)' % (x['kind'].upper(), x['tiles'], x['life'], x['frac'], x['dt'], x['calls'], round(x['frac'] * x['calls']), x['tile_total'])]
     for c in x['chems']: L.append('  %-24s tile %6gu  per tick %5gu  whole life %6.1fu  blood:%s  %s' % (c['n'], c['tile'], c['per'], c['per'] * x['calls'], 'yes' if c['pen'] else 'no', c['contact'] or ''))
+    fl = x['floor']; L.append('  FLOOR (per exposure = tile x %g%%, %d exposures):' % (fl['frac'], fl['exposures']))
+    for r in fl['rows']:
+        L.append('   %-22s tile %6gu  per exposure %6gu  life %6gu  ' % (r['n'], r['tile'], r['per'], r['total']) + ('; '.join(('OK ' if e['fires'] else 'NO ') + e['l'] + ('' if e['fires'] else ' (needs %gu per exposure = %gu per tile)' % (e['thr'], e['need_tile'])) + ((' [' + e['extra'] + ']') if e['extra'] else '') for e in r['effs']) or 'nothing on the floor'))
+    if x['inert']: L.append('  BROKEN - wasted chemicals: ' + '; '.join('%s %gu (%s)' % (i['n'], i['u'], i['why']) for i in x['inert']))
     L.append('  Rules:'); L += ['   - ' + r for r in x['rules']]
     for s in x['scenarios']:
         fx = s['fx']; bits = []
         if fx.get('fire'): bits.append('%g fire stacks' % fx['fire'])
         if fx.get('ignite'): bits.append('ignites')
-        for k in ('burn', 'brute', 'slip'):
-            if fx.get(k): bits.append('%s %g%s' % (k, fx[k], ' s' if k == 'slip' else ''))
+        for k in ('burn', 'brute'):
+            if fx.get(k): bits.append('%s %g' % (k, fx[k]))
         if fx.get('acid_brute') or fx.get('acid_burn'): bits.append('acid %g brute/%g burn' % (fx.get('acid_brute', 0), fx.get('acid_burn', 0)))
         b = s.get('blood')
         L.append('  [%s] %s | %s | absorbed %gu%s | contact: %s | blood: %s' % (s['name'], ('bio %g%% blocked' % s['block']) if foam else ('breathes' if s['breathes'] else 'BLOCKED'), s['note'], s['absorbed'],

@@ -18,8 +18,9 @@ import chemstats as cs
 import gear as gearlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FOAM_DT, FOAM_LIFE, MIN_DIL = 0.2, 8.0, 25.0
-SMOKE_DT, SMOKE_LIFE = 2.0, 20.0
+import tileapply as ta
+FOAM_DT, FOAM_LIFE, MIN_DIL = ta.FOAM_DT, ta.FOAM_LIFE, ta.FOAM_MIN_DIL
+SMOKE_DT, SMOKE_LIFE = ta.SMOKE_DT, ta.SMOKE_LIFE
 TOUCH, INGEST, VAPOR, PATCH, INJECT = 1, 2, 4, 8, 16
 
 _gear = None
@@ -75,14 +76,10 @@ def contact(p, methods, vol, sc):
         if methods & (TOUCH | VAPOR | PATCH): out['fire_stacks'] = vol / 15.0
     elif p == '/datum/reagent/hydrogen_peroxide':
         if methods & TOUCH: out['burn_flat'] = min(vol * 0.5 / 3.0, 25)
-        if vol >= 5: out['slip_s'] = min(vol * 1.5, 60); out['slip_kind'] = 'wet floor'
     elif p in ('/datum/reagent/water', '/datum/reagent/water/salt'):
         if methods & TOUCH: out['extinguish'] = True
-        if vol >= 5: out['slip_s'] = min(vol * 1.5, 60); out['slip_kind'] = 'wet floor'
     elif p == '/datum/reagent/firefighting_foam':
         if methods & (TOUCH | VAPOR): out['extinguish'] = True
-    elif p == '/datum/reagent/lube':
-        if vol >= 1: out['slip_s'] = min(vol * 2.0, 120); out['slip_kind'] = 'lubed floor'
     elif p in ('/datum/reagent/space_cleaner', '/datum/reagent/space_cleaner/sterilizine'):
         if methods & (TOUCH | VAPOR): out['clean'] = True
     elif p == '/datum/reagent/toxin/mutagen':
@@ -105,8 +102,7 @@ CONTACT_TEXT = {
     '/datum/reagent/hydrogen_peroxide': 'touch: burn = units*0.5/3 (max 25) per exposure; floor wet at 5u+',
     '/datum/reagent/water': 'touch: puts out fire, adds wet stacks; floor wet at 5u+',
     '/datum/reagent/firefighting_foam': 'puts out fire on the target and the turf',
-    '/datum/reagent/lube': 'floor: 15 s of lube + 2 s per unit (max 120 s) per exposure of 1u or more',
-    '/datum/reagent/space_cleaner': 'washes the target and the floor (floor needs 1u+ per exposure)',
+    '/datum/reagent/space_cleaner': 'washes the target (floor effects are listed apart)',
     '/datum/reagent/toxin/mutagen': 'foam: (units)% chance per exposure (max 33%) of a random mutation',
 }
 
@@ -144,22 +140,19 @@ def run_blood(arrivals, max_ticks=4000):
     return dict(totals=tot, organ=organ, peak=peak, od_first=od_first, tags=tags, ticks=ticks_present, crit=crit, duration_ticks=t)
 
 # ---------------------------------------------------------------- the model
-def foam_fraction(tiles):
-    return FOAM_DT * MIN_DIL / (FOAM_LIFE * max(MIN_DIL, float(tiles)))
+foam_fraction = ta.foam_fraction
 
-def analyse(kind, tile, tiles, payload_paths=None):
+def analyse(kind, tile, tiles, payload_paths=None, air_k=293.15):
     """kind 'foam' | 'smoke'; tile = {reagent path: units in each tile}; tiles = area.  Returns the full report (all scenarios)."""
     kind = 'foam' if kind == 'foam' else 'smoke'
-    if kind == 'foam':
-        n = int(round(FOAM_LIFE / FOAM_DT)); frac = foam_fraction(tiles); dt = FOAM_DT; life = FOAM_LIFE
-    else:
-        n = 9; frac = SMOKE_DT / SMOKE_LIFE; dt = SMOKE_DT; life = SMOKE_LIFE
+    pl = ta.plan(kind, tiles); frac = pl['fraction']; dt = pl['dt']; life = pl['life']
+    n = pl['exposures'] if kind == 'foam' else pl['exposures']
     chems = []
     for p, u in sorted(tile.items(), key=lambda kv: -kv[1]):
         st = cs.stats().get(p, {}); pen = st.get('vars', {}).get('penetrates_skin', 4.0)
         pen = pen if isinstance(pen, (int, float)) else 4.0
         chems.append(dict(path=p, name=st.get('name') or p, tile=u, per_call=u * frac, pen=int(pen), contact=CONTACT_TEXT.get(p)))
-    rep = dict(kind=kind, tiles=tiles, fraction=frac, calls=n + (1 if kind == 'smoke' else 0), dt=dt, life=life, chems=chems, scenarios=[], tile_total=sum(tile.values()))
+    rep = dict(floor=ta.tile_report(kind, tiles, tile, air_k), kind=kind, tiles=tiles, fraction=frac, calls=n + (1 if kind == 'smoke' else 0), dt=dt, life=life, chems=chems, scenarios=[], tile_total=sum(tile.values()))
     for sc in SCENARIOS:
         num = scenario_numbers(sc)
         arrivals = {}; absorbed = {c['path']: 0.0 for c in chems}; per_call_abs = {}
@@ -184,7 +177,7 @@ def analyse(kind, tile, tiles, payload_paths=None):
                     methods = TOUCH | (INGEST if (num['carbon'] and not num['smoke_block']) else 0)
                     if i == calls - 1: continue                # the arrival breath has no TOUCH tick; keep the INGEST/blood part only
                 e = contact(p, methods if kind == 'smoke' else VAPOR, vol, sc)
-                for k, tgt in (('burn_flat', 'burn_flat'), ('brute_flat', 'brute_flat'), ('slip_s', 'slip_s')):
+                for k, tgt in (('burn_flat', 'burn_flat'), ('brute_flat', 'brute_flat')):
                     if k in e: fx[tgt] += e[k]
                 if 'fire_stacks' in e: stacks = min(stacks + e['fire_stacks'], 20.0)       # adjust_fire_stacks is capped at MAX_FIRE_STACKS = 20
                 if 'burn_per_stack' in e: fx['burn_flat'] += e['burn_per_stack'] * max(stacks, 1.0)

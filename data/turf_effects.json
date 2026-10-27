@@ -1,0 +1,262 @@
+{
+ "_readme": "Floor-tile effects of reagents (reagent.expose_turf in the game code, checked against the code at the chem_stats snapshot). thr = minimum units of that chemical in ONE exposure (not the tile total) before the effect happens; null = any amount. Effects of parent types also apply (the code calls the parent proc first). model: wet (slippery floor timer), accum (amounts add up over exposures), prob (chance per exposure), mark (permanent decal / change).",
+ "/datum/reagent/water": [
+  {
+   "id": "wet",
+   "label": "Wet floor",
+   "thr": 5,
+   "tip": "Floor with this much water in one exposure becomes slippery (walking is safe, running slips). Wet time: 10 s minimum, +1.5 s per unit each exposure (max +60 s each). Also puts out fires on the tile.",
+   "model": "wet",
+   "kind": "water",
+   "min_s": 10,
+   "per_u": 1.5,
+   "cap_add_s": 60
+  }
+ ],
+ "/datum/reagent/water/holywater": [
+  {
+   "id": "bless",
+   "label": "Blessed tile",
+   "thr": null,
+   "tip": "Blesses the tile (any amount). Holy water also deletes cult runes on the tile when one exposure carries 10u or more.",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/hydrogen_peroxide": [
+  {
+   "id": "wet",
+   "label": "Wet floor",
+   "thr": 5,
+   "tip": "Same slippery water floor as water: 10 s minimum, +1.5 s per unit each exposure (max +60 s each).",
+   "model": "wet",
+   "kind": "water",
+   "min_s": 10,
+   "per_u": 1.5,
+   "cap_add_s": 60
+  }
+ ],
+ "/datum/reagent/lube": [
+  {
+   "id": "slick",
+   "label": "Slick floor",
+   "thr": 1,
+   "tip": "Floor becomes lubed: anyone who walks on it slips and slides, and is confused for 8 s after. Wet time 15 s minimum, +2 s per unit each exposure, but only the first 12 s of each exposure count (the code caps it at 120 deciseconds). A floor stays slick until the timer runs out.",
+   "model": "wet",
+   "kind": "lube",
+   "min_s": 15,
+   "per_u": 2,
+   "cap_add_s": 12
+  }
+ ],
+ "/datum/reagent/lube/superlube": {
+  "replace": true,
+  "effects": [
+   {
+    "id": "slick",
+    "label": "Super-slick floor",
+    "thr": 1,
+    "tip": "Floor becomes SUPER lube: slips even people crawling and slides much further than normal lube. Wet time 15 s minimum, +2 s per unit each exposure (first 12 s of each exposure count).",
+    "model": "wet",
+    "kind": "superlube",
+    "min_s": 15,
+    "per_u": 2,
+    "cap_add_s": 12
+   }
+  ]
+ },
+ "/datum/reagent/consumable/cornoil": [
+  {
+   "id": "slick",
+   "label": "Slick floor",
+   "thr": null,
+   "tip": "Any amount makes the floor lubed: 10 s minimum, +2 s per unit each exposure (no per-exposure cap). Also puts out fire on the tile.",
+   "model": "wet",
+   "kind": "lube",
+   "min_s": 10,
+   "per_u": 2,
+   "cap_add_s": 300
+  }
+ ],
+ "/datum/reagent/consumable/cooking_oil": [
+  {
+   "id": "slick",
+   "label": "Deep-fried slick floor",
+   "thr": 5,
+   "tip": "Floor becomes lubed and is renamed \"Deep-fried ...\": 10 s minimum, +1.5 s per unit each exposure.",
+   "model": "wet",
+   "kind": "lube",
+   "min_s": 10,
+   "per_u": 1.5,
+   "cap_add_s": 300
+  }
+ ],
+ "/datum/reagent/consumable/frostoil": [
+  {
+   "id": "ice",
+   "label": "Icy floor",
+   "thr": 1,
+   "tip": "Floor turns to ice: slippery, slides. 10 s minimum, +1 s per unit each exposure. Also chills the air on the tile. 5u or more also hurts slimes.",
+   "model": "wet",
+   "kind": "ice",
+   "min_s": 10,
+   "per_u": 1,
+   "cap_add_s": 300
+  }
+ ],
+ "/datum/reagent/space_cleaner": [
+  {
+   "id": "clean",
+   "label": "Cleans the tile",
+   "thr": 1,
+   "tip": "Washes the tile and everything mopable on it (blood, dirt, decals, thermite, acid, chemical residue). Needs 1u or more in one exposure. Hurts slimes.",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/drying_agent": [
+  {
+   "id": "dry",
+   "label": "Dries the tile",
+   "thr": null,
+   "tip": "Removes 10 s of wet time per unit from every kind of wet floor on the tile, each exposure. 5u in one exposure dries a normal wet floor.",
+   "model": "dry",
+   "per_u": 10
+  }
+ ],
+ "/datum/reagent/firefighting_foam": [
+  {
+   "id": "ffoam",
+   "label": "Fire-fighting foam on the tile",
+   "thr": 1,
+   "tip": "1u or more in one exposure makes (or refreshes) firefighting foam on the tile; any amount puts out hotspots (fires) and cools the air.",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/thermite": [
+  {
+   "id": "thermite",
+   "label": "Thermite coating",
+   "thr": 1,
+   "tip": "1u or more in one exposure adds that amount to a thermite coat on the tile. The coat ADDS UP over every exposure. When lit it melts the tile (floor or ordinary wall) only if the total is 30u or more (50u for a reinforced wall); burn delay is 0.35 s per unit (max 20 s) after ignition.",
+   "model": "accum",
+   "need": 30,
+   "need_rwall": 50
+  }
+ ],
+ "/datum/reagent/uranium": [
+  {
+   "id": "glow",
+   "label": "Radioactive glow pile",
+   "thr": 3,
+   "tip": "3u or more in one exposure leaves a glowing green goo pile (light power 3, radius 2, green) holding the chemical. It stays until cleaned. Each further exposure of 3u or more adds the chemical to the pile.",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/fuel": [
+  {
+   "id": "fuelpool",
+   "label": "Pool of fuel",
+   "thr": 5,
+   "tip": "5u or more in one exposure leaves a pool of flammable fuel (size = exposure / 5). It burns when lit: a fire hazard that is on the floor until cleaned.",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/consumable/salt": [
+  {
+   "id": "salt",
+   "label": "Salt pile",
+   "thr": 1,
+   "tip": "1u or more in one exposure leaves a salt pile (blocks shadow / umbra walkers).",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/consumable/flour": [
+  {
+   "id": "flour",
+   "label": "Flour pile",
+   "thr": null,
+   "tip": "Any amount leaves a flour decal holding the exposure amount.",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/carbon": [
+  {
+   "id": "dirt",
+   "label": "Dirt",
+   "thr": null,
+   "tip": "Any amount leaves a dirt decal.",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/blood": [
+  {
+   "id": "blood",
+   "label": "Blood splatter",
+   "thr": 3,
+   "tip": "3u or more in one exposure leaves a blood splatter on the tile.",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/carpet": [
+  {
+   "id": "carpet",
+   "label": "Carpet floor",
+   "thr": null,
+   "tip": "Any amount converts a solid open floor (not already carpet) into this carpet permanently.",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/glitter": [
+  {
+   "id": "glitter",
+   "label": "Glitter",
+   "thr": null,
+   "tip": "Any amount leaves a glitter decal.",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/metalgen": [
+  {
+   "id": "metal",
+   "label": "Material morph",
+   "thr": null,
+   "tip": "Any amount morphs the materials of what is on the tile into the metalgen material (only works if the chemical carries a material).",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/clf3": [
+  {
+   "id": "clf3",
+   "label": "Burns the floor",
+   "thr": null,
+   "tip": "Each exposure has (units)% chance to turn the floor to plating or burn the tile, a base 10% (more if the plating is burnt or broken) to remove plating, and starts fires on the tile and its 8 neighbours.",
+   "model": "prob"
+  }
+ ],
+ "/datum/reagent/toxin/plasma": [
+  {
+   "id": "plasma",
+   "label": "Plasma gas",
+   "thr": null,
+   "tip": "Only if the chemical is at 50 C or hotter: each exposure turns its units into plasma gas on the tile (explosive / toxic atmos).",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/toxin/acid": [
+  {
+   "id": "acid",
+   "label": "Acid on the tile",
+   "thr": null,
+   "tip": "Any amount adds an acid layer that eats items and burns anyone who steps in it. Acid power 200 or more also melts the tile; fluorosulfuric acid is 42 and sulfuric 10, so floors survive.",
+   "model": "mark"
+  }
+ ],
+ "/datum/reagent/eigenstate": [
+  {
+   "id": "eigen",
+   "label": "Links lockers",
+   "thr": null,
+   "tip": "Any amount links lockers on the tile into an eigenstate group (needs a closet on the tile).",
+   "model": "mark"
+  }
+ ]
+}

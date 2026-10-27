@@ -22,7 +22,7 @@ chemcli.py - Cyborg Chem Nade planner for Monkestation (uses chemlib/planner/sea
 Everything is simulated by chemlib (a port of holder.dm / recipes). See README in the notes tab.
 """
 import sys, os, argparse, itertools, random, time, json
-import chemlib, planner, search
+import chemlib, exposure, planner, search
 from chemlib import DB
 
 def tail(s): return s.replace('/datum/reagent/', '')
@@ -355,7 +355,13 @@ def gear_from(args):
 def book_cmd(args):
     import book
     if args.cmd == 'book':
-        if args.action == 'rebuild': print('wrote', book.write_page(use_cache=True)); return
+        if args.action == 'rebuild':
+            print('wrote', book.write_page(use_cache=True))
+            bad = book.broken_recipes()
+            if bad:
+                print('BROKEN recipes (chemicals taking up space that do nothing): %d' % len(bad))
+                for rid, lst in bad: print('  %-30s %s' % (rid, ', '.join(lst)))
+            return
         if args.action == 'rm':
             if not args.id: raise SystemExit('book rm <id>')
             book.remove_recipe(args.id); print('removed', args.id); return
@@ -433,6 +439,14 @@ def _nodes(t):
     for c in t.children.values():
         if c is not None: yield from _nodes(c)
 
+def tile_cmd(args):
+    import statspanel, tileapply
+    db = DB()
+    try: tile = statspanel.parse_mix(db, args.mix)
+    except ValueError as ex: print('error:', ex); return 1
+    print(statspanel.exp_text(statspanel.exposure_block(db, dict(kind=args.kind, tile=tile, tiles=args.tiles), air_k=args.air)))
+    return 0
+
 def stats_cmd(args):
     import statspanel, chemstats
     db = DB()
@@ -489,7 +503,11 @@ def main(argv=None):
     a = sub.add_parser('mix', help='effects of a chemical mix: "libital 30, mannitol 15"; or --recipe ID for a recipe from the book')
     a.add_argument('mix', nargs='?', default=''); a.add_argument('--recipe', default='')
     a = sub.add_parser('stats', help='what one chemical does (per tick, overdose, status effects)'); a.add_argument('name')
+    a = sub.add_parser('tile', help='amount applied per floor tile: foam/smoke size + tile contents -> per exposure, floor effects, wasted chemicals')
+    a.add_argument('kind', choices=['foam', 'smoke']); a.add_argument('tiles', type=int, help='foam / smoke area in tiles')
+    a.add_argument('mix', help='contents of ONE tile: "lube 64, thermite 40"'); a.add_argument('--air', type=float, default=293.15, help='air temperature in K (wet floors dry faster when hot)')
     args = ap.parse_args(argv)
+    if args.cmd == 'tile': return tile_cmd(args)
     if args.cmd in ('mix', 'stats'): return stats_cmd(args)
     if args.cmd in ('publish', 'book'): return book_cmd(args)
     if args.cmd in ('chems', 'make'): return chem_cmd(args)

@@ -256,6 +256,14 @@ def build_page(recipes=None, db=None, use_cache=True):
     img = 'data:image/webp;base64,' + base64.b64encode(open(hero, 'rb').read()).decode() if os.path.exists(hero) else ''
     return tpl.replace('/*__HERO_IMG__*/', img).replace('/*__BOOK_JSON__*/null', blob)
 
+def broken_recipes(recipes=None, db=None):
+    """[(id, [wasted chemical names])] for every recipe whose foam / smoke carries chemicals that do nothing"""
+    db = db or chemlib.DB(json_path=os.path.join(HERE, 'chemdata.json')); cache = _load_cache(); out = []
+    for e in (recipes if recipes is not None else load_book()):
+        st = computed(db, e, cache).get('stats') or {}
+        if st.get('broken'): out.append((e['id'], ['%s %gu' % (i['n'], i['u']) for i in st['exp']['inert']]))
+    return out
+
 def write_page(**kw):
     html = build_page(**kw)
     os.makedirs(os.path.dirname(PAGE_PATH), exist_ok=True)
@@ -274,6 +282,10 @@ def add_recipe(spec, db=None, write=True):
     if group_of(e) != 'chem' and (not o.get('clicks_ok', True) or not o.get('reverse_ok', True)):
         raise ValueError('the result depends on the click order inside a dispenser step (%s) or on which of two same-ingredient reactions the game tries first (%s): '
                          'rebalance the amounts (e.g. keep every split click a multiple of the reaction ratio)' % ('click order' if not o.get('clicks_ok', True) else 'ok', 'reaction priority' if not o.get('reverse_ok', True) else 'ok'))
+    st = comp.get('stats') or {}
+    if st.get('broken') and not spec.get('allow_waste'):
+        raise ValueError('BROKEN: chemicals that take up space but do nothing (no floor effect, no contact effect, nothing in the blood): %s. Remove them from the recipe, or set allow_waste to file it anyway.' %
+                         '; '.join('%s %gu: %s' % (i['n'], i['u'], i['why']) for i in st['exp']['inert']))
     if not o.get('temp_ok', True):
         raise ValueError('the result changes if the beaker is a few K hotter or colder after a heater step (the heater never quite reaches its target, cold chemicals dilute the heat): '
                          'heat last, or add a cool-down step (cool <K>) before the next chemical')

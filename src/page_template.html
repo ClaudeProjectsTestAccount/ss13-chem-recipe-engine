@@ -75,8 +75,10 @@ ol.steps ol.items li::before{content:counter(it);position:absolute;left:.25rem;t
 .fx .neg{color:var(--safe);font-weight:650}.fx .pos{color:var(--danger);font-weight:650}
 .fx .bf{display:flex;flex-wrap:wrap;gap:.3rem;margin:.3rem 0}
 .fx .bf span{border:1px solid var(--line);border-radius:6px;padding:0 .4rem;font-size:.8rem;cursor:help;background:var(--chip)}
-.fx .bf span.buff{border-color:var(--safe);color:var(--safe)}.fx .bf span.debuff{border-color:var(--danger);color:var(--danger)}
+.fx .bf span.buff{border-color:var(--safe);color:var(--safe)}.fx .bf span.floor{border-color:var(--accent);color:var(--accent)}.fx .bf span.debuff{border-color:var(--danger);color:var(--danger)}
 .fx ul.rules{margin:.2rem 0 .2rem 1.1rem;padding:0;font-size:.86rem}.fx ul.rules li{margin:.15rem 0}
+.fx .hot.bad{border-left-color:var(--danger);color:var(--danger);background:var(--card)}
+.fx .ok{color:var(--safe)}
 .fx .hot{background:var(--rbg);border-left:5px solid var(--accent);padding:.3rem .6rem;border-radius:6px;margin:.4rem 0;font-size:.88rem}
 .kv{margin:.45rem 0}.kv b{font-weight:650}
 .warn{color:var(--caution)}
@@ -255,6 +257,7 @@ function summaryChips(r){
     if(s.per_tick!=null) c.appendChild(chip(s.per_tick+'u per tile per tick'));
   } else if(s.kind==='vortex') c.appendChild(chip('range '+s.range+' tiles'));
   else if(s.kind==='mobspawn') c.appendChild(chip('1 to '+s.mobs+' mobs'));
+  if(r.stats&&r.stats.broken) c.appendChild(chip('BROKEN: wasted chems','danger'));
   if(s.fill!=null) c.appendChild(chip('beaker '+s.fill+'% used'));
   c.appendChild(chip(HARM[r.harm]||r.harm, r.harm));
   return c;
@@ -292,12 +295,27 @@ function mixPanel(m, into){
   var ch=m.chips.slice(); m.organ.forEach(function(o){ ch.push({l:(o.heal?'Heals ':'Damages ')+o.slot, c:o.heal?'buff':'debuff', tip:'Organ damage on '+o.slot+': '+sgn(o.rate)+' per tick (negative heals).', by:o.by}); });
   if(ch.length){ into.appendChild(el('h4',null,'Status effects (hover for the rules)')); into.appendChild(chipRow(ch)); }
 }
+function floorPanel(f, into){
+  into.appendChild(el('h4',null,'What each chemical does to the floor tile'));
+  into.appendChild(el('div','hot','Floor effects test the amount in ONE exposure (tile contents x '+f.frac+'%), not the tile total. '+f.exposures+' exposures per tile over the life, so the whole-life column is what the tile gets in total. Hover an effect for its rules.'));
+  var rows=f.rows.map(function(r){
+    var td=el('td'); if(!r.effs.length) td.textContent='nothing on the floor';
+    r.effs.forEach(function(e){ var s=el('div',null,(e.fires?'✔ ':'✘ ')+e.l+(e.fires?'':' - not triggered: needs '+e.thr+'u per exposure ('+e.need_tile+'u in each tile)')+(e.extra?' ('+e.extra+')':'')); s.title=e.tip; s.style.cursor='help'; s.className=e.fires?'ok':'warn'; td.appendChild(s); });
+    return tr([r.n, nc(r.tile+'u'), nc(r.per+'u'), nc(r.total+'u'), td]); });
+  into.appendChild(tbl(['Chemical','In tile','Per exposure','Whole life','Floor effect'], rows));
+}
+function brokenBanner(x, into){
+  var d=el('div','hot bad'); d.appendChild(el('b',null,'BROKEN - chemicals taking up space that do nothing: '));
+  d.appendChild(document.createTextNode(x.map(function(i){ return i.n+' ('+i.u+'u per tile): '+i.why; }).join('; ')+'.'));
+  into.appendChild(d);
+}
 function expPanel(x, into){
   var foam=x.kind==='foam';
   into.appendChild(el('h4',null,(foam?'Foam':'Smoke')+' exposure: how it reaches a person'));
   into.appendChild(el('div','hot','Covers up to '+x.tiles+' tiles for about '+x.life+' s. Each '+x.dt+' s tick every chemical in a tile is applied to everyone in it: '+x.frac+'% of the tile contents per tick, '+x.calls+' ticks = about '+Math.round(x.frac*x.calls)+'% of the tile over its whole life. Tile holds '+x.tile_total+'u.'));
   var rows=x.chems.map(function(c){ return tr([c.n, nc(c.tile+'u'), nc(c.per+'u'), nc((c.per*x.calls).toFixed(1)+'u'), c.pen? (foam?'yes':'breathed in') : 'no (contact only)', c.contact||'']); });
   into.appendChild(tbl(['Payload chemical','In tile','Per tick','Whole life','Gets into blood?','Contact effect (works through any clothing)'], rows));
+  if(x.floor) floorPanel(x.floor, into);
   var rl=el('ul','rules'); x.rules.forEach(function(r){ rl.appendChild(el('li',null,r)); });
   var det=el('details','fx'); det.open=true; det.appendChild(el('summary',null,'Rules for how it applies (read this first)')); det.appendChild(rl); into.appendChild(det);
   into.appendChild(el('h4',null,'What a person takes, by protection'));
@@ -305,7 +323,7 @@ function expPanel(x, into){
   var srows=x.scenarios.map(function(s){
     var ab=s.absorbed? s.absorbed+'u: '+Object.keys(s.per).map(function(k){ return s.per[k]+'u '+k; }).join(', ') : 'nothing';
     var fx=[]; if(s.fx.fire) fx.push(s.fx.fire+' fire stacks'); if(s.fx.ignite) fx.push('set on fire'); if(s.fx.burn) fx.push(s.fx.burn+' burn'); if(s.fx.brute) fx.push(s.fx.brute+' brute');
-    if(s.fx.slip) fx.push('slip lube '+s.fx.slip+' s'); if(s.fx.acid_brute||s.fx.acid_burn) fx.push('acid '+(s.fx.acid_brute||0)+' brute / '+(s.fx.acid_burn||0)+' burn'); if(s.fx.mutate) fx.push('mutation'); if(s.fx.clean) fx.push('washed'); if(s.fx.extinguish) fx.push('extinguished');
+    if(s.fx.acid_brute||s.fx.acid_burn) fx.push('acid '+(s.fx.acid_brute||0)+' brute / '+(s.fx.acid_burn||0)+' burn'); if(s.fx.mutate) fx.push('mutation'); if(s.fx.clean) fx.push('washed'); if(s.fx.extinguish) fx.push('extinguished');
     if(s.fire_cover>0&&s.fx.fire) fx.push('(fire armour cuts burn '+s.fire_cover+'%)');
     var bl=s.blood? fxNet(s.blood.totals)+(s.blood.tags.length? '; '+s.blood.tags.map(function(t){return t.l;}).join(', ') : '')+(Object.keys(s.blood.od).length? '; OD: '+Object.keys(s.blood.od).map(function(k){return k+' after '+s.blood.od[k]+' s';}).join(', '):'') : '–';
     var r=tr([s.name, foam? s.block+'% blocked' : (s.breathes?'yes':'NO - blocked'), ab, fx.join(', ')||'none', bl]); r.title=s.note; return r; });
@@ -314,6 +332,7 @@ function expPanel(x, into){
 }
 function statsPanel(st){
   var d=el('details','fx'); d.open=true; d.appendChild(el('summary',null,'Effects (from the game code)'));
+  if(st.exp&&st.exp.inert&&st.exp.inert.length) brokenBanner(st.exp.inert, d);
   if(st.mix) mixPanel(st.mix, d);
   if(st.exp) expPanel(st.exp, d);
   return d;

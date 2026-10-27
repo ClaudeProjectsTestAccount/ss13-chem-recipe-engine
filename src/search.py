@@ -96,26 +96,18 @@ def evaluate_designs(db, syr_ings, bkr_ings, syr_builder, bkr_builder, judge,
 FOAM_DT = 0.2      # SSfoam effect_wait (fluids.dm: FLUID_SUBSYSTEM_DEF(foam)); foam lifetime 8s
 SMOKE_DT = 2.0     # SSsmoke effect_wait; chem smoke lifetime 20s
 
-def foam_metrics(rig, payload_path):
-    """per-tile payload and the volume exposed to a tile's turf on each foam tick"""
-    foams = [e for e in rig.sim.effects if e['kind'] == 'foam']
-    if len(foams) != 1 or any(e['kind'] == 'UNMODELED' for e in rig.sim.effects):
+def _metrics(kind, rig, payload_path):
+    """per-tile payload and the amount exposed to a tile's floor / mobs on each tick (numbers from tileapply)"""
+    import tileapply
+    fx = [e for e in rig.sim.effects if e['kind'] == kind]
+    if len(fx) != 1 or any(e['kind'] == 'UNMODELED' for e in rig.sim.effects):
         return None
-    f = foams[0]; tile = f['tile']
+    f = fx[0]; tile = f['tile']
     pay = tile.get(payload_path, 0.0)
     junk = sum(v for p, v in tile.items() if p != payload_path)
-    dil = chemlib.FOAM_MIN_DILUTION / max(chemlib.FOAM_MIN_DILUTION, f['tiles'])
-    frac = FOAM_DT * dil / 8.0                      # (dt*MINIMUM_FOAM_DILUTION)/(lifetime*max(MIN_DIL,tiles))
-    return dict(tiles=f['tiles'], payload_tile=pay, junk_tile=junk, per_call=pay * frac,
-                calls=8.0 / FOAM_DT, expo_per_s=pay * frac / FOAM_DT, life=8)
+    pl = tileapply.plan(kind, f['tiles'])
+    per = pay * pl['fraction']
+    return dict(tiles=f['tiles'], payload_tile=pay, junk_tile=junk, per_call=per, calls=pl['exposures'] if kind == 'foam' else pl['life'] / pl['dt'], expo_per_s=per / pl['dt'], life=int(pl['life']))
 
-def smoke_metrics(rig, payload_path):
-    sm = [e for e in rig.sim.effects if e['kind'] == 'smoke']
-    if len(sm) != 1 or any(e['kind'] == 'UNMODELED' for e in rig.sim.effects):
-        return None
-    f = sm[0]; tile = f['tile']
-    pay = tile.get(payload_path, 0.0)
-    junk = sum(v for p, v in tile.items() if p != payload_path)
-    frac = SMOKE_DT / 20.0
-    return dict(tiles=f['tiles'], payload_tile=pay, junk_tile=junk, per_call=pay * frac,
-                calls=20.0 / SMOKE_DT, expo_per_s=pay * frac / SMOKE_DT, life=20)
+def foam_metrics(rig, payload_path): return _metrics('foam', rig, payload_path)
+def smoke_metrics(rig, payload_path): return _metrics('smoke', rig, payload_path)
